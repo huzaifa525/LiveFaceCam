@@ -26,19 +26,7 @@ import time
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 
-# The live webcam loop marks its worker thread so frame-rate-heavy options
-# (detail boost, Poisson blending) are skipped there: at 1080p they took live
-# preview from ~22 fps to ~5 fps, which froze lip movement and made the face
-# jump on head turns. They still apply to photo and video conversion.
-_THREAD_MODE = threading.local()
-
-
-def set_live_thread(live: bool) -> None:
-    _THREAD_MODE.live = live
-
-
-def _is_live_thread() -> bool:
-    return getattr(_THREAD_MODE, "live", False)
+from modules.runtime_state import is_live_thread as _is_live_thread, set_live_thread  # noqa: F401,E402
 NAME = "DLC.FACE-SWAPPER"
 
 # --- START: Added for Interpolation ---

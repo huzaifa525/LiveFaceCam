@@ -77,6 +77,7 @@ from modules.utilities import (
 )
 from modules import imread_unicode
 from modules import swap_models
+from modules.runtime_state import set_live_thread
 from modules.virtual_camera import VirtualCamOutput
 from modules.ui_theme import (
     THEME_MODES,
@@ -1482,7 +1483,6 @@ class _ProcessingWorker(QThread):
         self._fps = camera_fps
 
     def run(self) -> None:
-        from modules.processors.frame.face_swapper import set_live_thread
         set_live_thread(True)
         vcam = VirtualCamOutput()
         try:
