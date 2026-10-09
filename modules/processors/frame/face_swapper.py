@@ -136,46 +136,98 @@ def _apply_face_edits(bgr_fake: np.ndarray, temp_frame: Frame, M: np.ndarray) ->
 
 
 
-def _swap_pixel_boost(face_swapper: Any, img: Frame, target_face: Face,
-                      source_face: Face, boost: int) -> Tuple[np.ndarray, np.ndarray]:
-    """Run inswapper at boost x its native 128px resolution.
+class HyperSwapper:
+    """FaceFusion HyperSwap (256px). Takes the plain arcface embedding and
+    returns the swapped face plus an occlusion-aware face mask."""
 
-    The face is aligned at 128*boost, split into boost^2 interleaved 128px
-    tiles (every boost-th pixel, so each tile is a full downsampled face),
-    each tile is swapped with the same identity, and the tiles are woven
-    back together. Same idea as FaceFusion's pixel boost: more real detail
-    in eyes, teeth and skin, at boost^2 the inference cost.
+    def __init__(self, model_path: str, providers):
+        import onnxruntime as ort
+        self.model_file = model_path
+        self.session = ort.InferenceSession(model_path, providers=providers)
+        self.input_size = (256, 256)
+
+    def swap_crop(self, crop_bgr: np.ndarray, source_face: Face) -> Tuple[np.ndarray, np.ndarray]:
+        x = (crop_bgr[:, :, ::-1].astype(np.float32) * (2.0 / 255.0) - 1.0).transpose(2, 0, 1)[None]
+        out, mask = self.session.run(None, {
+            "source": source_face.normed_embedding.reshape(1, -1).astype(np.float32),
+            "target": np.ascontiguousarray(x),
+        })
+        fake = ((out[0].transpose(1, 2, 0) * 0.5 + 0.5).clip(0.0, 1.0) * 255.0).astype(np.uint8)
+        return np.ascontiguousarray(fake[:, :, ::-1]), mask[0, 0].clip(0.0, 1.0)
+
+
+def _inswapper_swap_crop(face_swapper: Any, crop_bgr: np.ndarray, latent: np.ndarray) -> np.ndarray:
+    mean = face_swapper.input_mean
+    blob = cv2.dnn.blobFromImage(np.ascontiguousarray(crop_bgr), 1.0 / face_swapper.input_std,
+                                 face_swapper.input_size, (mean, mean, mean), swapRB=True)
+    pred = face_swapper.session.run(
+        face_swapper.output_names,
+        {face_swapper.input_names[0]: blob, face_swapper.input_names[1]: latent},
+    )[0]
+    return np.clip(255 * pred.transpose((0, 2, 3, 1))[0], 0, 255).astype(np.uint8)[:, :, ::-1]
+
+
+def _run_swapper(face_swapper: Any, img: Frame, target_face: Face,
+                 source_face: Face) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    """Swap one face. Returns (bgr_fake, M, mask-or-None) in aligned space.
+
+    With face_detail > 1 the face is aligned at boost x the model's native
+    size, split into boost^2 interleaved tiles (every boost-th pixel, so each
+    tile is a full downsampled face), each tile is swapped with the same
+    identity and the tiles are woven back together, the same idea as
+    FaceFusion's pixel boost: real detail in eyes, teeth and skin at boost^2
+    the inference cost.
     """
+    boost = max(1, int(getattr(modules.globals, "face_detail", 1) or 1))
     size = face_swapper.input_size[0]
+    is_hyper = isinstance(face_swapper, HyperSwapper)
+    if boost == 1 and not is_hyper:
+        bgr_fake, M = face_swapper.get(img, target_face, source_face, paste_back=False)
+        return bgr_fake, M, None
+
     crop = size * boost
     aimg, M = face_align.norm_crop2(img, target_face.kps, crop)
-    latent = source_face.normed_embedding.reshape((1, -1))
-    latent = np.dot(latent, face_swapper.emap)
-    latent /= np.linalg.norm(latent)
-    tiles = aimg.reshape(size, boost, size, boost, 3).transpose(1, 3, 0, 2, 4).reshape(-1, size, size, 3)
-    mean = face_swapper.input_mean
-    outs = []
-    for tile in tiles:
-        blob = cv2.dnn.blobFromImage(np.ascontiguousarray(tile), 1.0 / face_swapper.input_std,
-                                     face_swapper.input_size, (mean, mean, mean), swapRB=True)
-        pred = face_swapper.session.run(
-            face_swapper.output_names,
-            {face_swapper.input_names[0]: blob, face_swapper.input_names[1]: latent},
-        )[0]
-        outs.append(pred.transpose((0, 2, 3, 1))[0])
-    woven = np.stack(outs).reshape(boost, boost, size, size, 3).transpose(2, 0, 3, 1, 4).reshape(crop, crop, 3)
-    bgr_fake = np.clip(255 * woven, 0, 255).astype(np.uint8)[:, :, ::-1]
-    return np.ascontiguousarray(bgr_fake), M
+    if is_hyper:
+        def swap_tile(tile):
+            return face_swapper.swap_crop(tile, source_face)
+    else:
+        latent = source_face.normed_embedding.reshape((1, -1))
+        latent = np.dot(latent, face_swapper.emap)
+        latent /= np.linalg.norm(latent)
+
+        def swap_tile(tile):
+            return _inswapper_swap_crop(face_swapper, tile, latent), None
+
+    if boost == 1:
+        bgr_fake, mask = swap_tile(aimg)
+        return bgr_fake, M, mask
+
+    try:
+        tiles = aimg.reshape(size, boost, size, boost, 3).transpose(1, 3, 0, 2, 4).reshape(-1, size, size, 3)
+        fakes, masks = [], []
+        for tile in tiles:
+            fake, mask = swap_tile(np.ascontiguousarray(tile))
+            fakes.append(fake)
+            masks.append(mask)
+
+        def weave(parts, channels):
+            arr = np.stack(parts).reshape(boost, boost, size, size, channels)
+            return np.ascontiguousarray(arr.transpose(2, 0, 3, 1, 4).reshape(crop, crop, channels))
+
+        bgr_fake = weave(fakes, 3)
+        mask = weave([m[..., None] for m in masks], 1)[..., 0] if masks[0] is not None else None
+        return bgr_fake, M, mask
+    except Exception as e:
+        print(f"[DLC.FACE-SWAPPER] Detail boost failed, using standard swap: {e}")
+        modules.globals.face_detail = 1
+        return _run_swapper(face_swapper, img, target_face, source_face)
 
 
-def _run_swapper(face_swapper: Any, img: Frame, target_face: Face, source_face: Face):
-    boost = int(getattr(modules.globals, "face_detail", 1) or 1)
-    if boost > 1 and hasattr(face_swapper, "emap") and hasattr(face_swapper, "session"):
-        try:
-            return _swap_pixel_boost(face_swapper, img, target_face, source_face, boost)
-        except Exception as e:
-            print(f"[DLC.FACE-SWAPPER] Detail boost failed, using standard swap: {e}")
-    return face_swapper.get(img, target_face, source_face, paste_back=False)
+def reset_face_swapper() -> None:
+    """Drop the loaded swapper so the next call loads the selected model."""
+    global FACE_SWAPPER
+    with THREAD_LOCK:
+        FACE_SWAPPER = None
 
 
 def _apply_poisson_blend(swapped_frame: Frame, original_frame: Frame,
@@ -396,12 +448,20 @@ def get_face_swapper() -> Any:
                         providers_config.append(OPENVINO_PROVIDER_CONFIG)
                     else:
                         providers_config.append(p)
-                FACE_SWAPPER = insightface.model_zoo.get_model(
-                    model_path,
-                    providers=providers_config,
-                )
+                from modules import swap_models
+                choice = getattr(modules.globals, "swap_model", swap_models.DEFAULT_SWAP_MODEL)
+                info = swap_models.SWAP_MODELS.get(choice)
+                if info and info["kind"] == "hyperswap" and swap_models.is_available(choice):
+                    model_path = swap_models.model_path(choice)
+                    update_status(f"Loading {info['label']}", NAME)
+                    FACE_SWAPPER = HyperSwapper(model_path, providers_config)
+                else:
+                    FACE_SWAPPER = insightface.model_zoo.get_model(
+                        model_path,
+                        providers=providers_config,
+                    )
                 # Set up CUDA graph session for faster inference
-                if _HAS_TORCH_CUDA and any(
+                if _HAS_TORCH_CUDA and not isinstance(FACE_SWAPPER, HyperSwapper) and any(
                     p == "CUDAExecutionProvider" or
                     (isinstance(p, tuple) and p[0] == "CUDAExecutionProvider")
                     for p in providers_config
@@ -561,7 +621,8 @@ def _cuda_graph_swap_inference(blob: np.ndarray, latent: np.ndarray) -> np.ndarr
         return cg['io_binding'].get_outputs()[0].numpy()
 
 
-def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, M: np.ndarray) -> Frame:
+def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, M: np.ndarray,
+                     model_mask: Optional[np.ndarray] = None) -> Frame:
     """Paste bgr_fake back onto target_img via the inverse affine of M.
 
     Restricts work to the face bbox in output coordinates and warps a
@@ -600,6 +661,11 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     crop_w, crop_h = x2p - x1p, y2p - y1p
 
     soft_alpha = _get_soft_alpha(face_h)
+    if model_mask is not None and model_mask.shape[:2] == (face_h, face_w):
+        # Swapper's own occlusion-aware mask (hands, hair, glasses stay
+        # visible), softened so its edge doesn't show, capped by the feather.
+        soft = cv2.GaussianBlur(model_mask.astype(np.float32), (0, 0), max(1.0, face_h / 96.0))
+        soft_alpha = np.minimum(soft_alpha, (soft * 255.0).astype(np.uint8))
     bgr_fake_crop = cv2.warpAffine(bgr_fake, IM_crop, (crop_w, crop_h), borderMode=cv2.BORDER_REPLICATE)
     alpha_crop = cv2.warpAffine(soft_alpha, IM_crop, (crop_w, crop_h), borderValue=0)
 
@@ -670,9 +736,9 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         # Use paste_back=False and our optimized paste-back
         if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
             with modules.globals.dml_lock:
-                bgr_fake, M = _run_swapper(face_swapper, temp_frame, target_face, source_face)
+                bgr_fake, M, model_mask = _run_swapper(face_swapper, temp_frame, target_face, source_face)
         else:
-            bgr_fake, M = _run_swapper(face_swapper, temp_frame, target_face, source_face)
+            bgr_fake, M, model_mask = _run_swapper(face_swapper, temp_frame, target_face, source_face)
 
         if bgr_fake is None:
             return original_frame
@@ -687,7 +753,7 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         _face_size = bgr_fake.shape[0]
         _aimg_dummy = np.empty((_face_size, _face_size, 3), dtype=np.uint8)
 
-        swapped_frame = _fast_paste_back(temp_frame, bgr_fake, _aimg_dummy, M)
+        swapped_frame = _fast_paste_back(temp_frame, bgr_fake, _aimg_dummy, M, model_mask)
 
     except Exception as e:
         print(f"Error during face swap: {e}")

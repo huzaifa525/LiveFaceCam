@@ -76,6 +76,7 @@ from modules.utilities import (
     is_video,
 )
 from modules import imread_unicode
+from modules import swap_models
 from modules.virtual_camera import VirtualCamOutput
 from modules.ui_theme import (
     THEME_MODES,
@@ -240,6 +241,7 @@ def save_switch_states():
         "show_fps": modules.globals.show_fps,
         "virtual_camera": modules.globals.virtual_camera,
         "ui_theme": getattr(modules.globals, "ui_theme", "system"),
+        "swap_model": getattr(modules.globals, "swap_model", swap_models.DEFAULT_SWAP_MODEL),
         "face_detail": getattr(modules.globals, "face_detail", 1),
         "color_match": getattr(modules.globals, "color_match", False),
         "skin_smoothing": getattr(modules.globals, "skin_smoothing", 0.0),
@@ -277,6 +279,8 @@ def load_switch_states():
         modules.globals.show_fps = state.get("show_fps", False)
         modules.globals.virtual_camera = state.get("virtual_camera", False)
         modules.globals.ui_theme = state.get("ui_theme", "system")
+        model = state.get("swap_model", swap_models.DEFAULT_SWAP_MODEL)
+        modules.globals.swap_model = model if model in swap_models.SWAP_MODELS else swap_models.DEFAULT_SWAP_MODEL
         detail = state.get("face_detail", 1)
         modules.globals.face_detail = detail if detail in (1, 2, 4) else 1
         modules.globals.color_match = bool(state.get("color_match", False))
@@ -874,11 +878,27 @@ class MainWindow(QMainWindow):
         self.cb_enhancer.setCurrentText(initial)
         self.cb_enhancer.currentTextChanged.connect(self._on_enhancer_change)
         self.cb_enhancer.setToolTip(_("Select a face enhancement model (None = no enhancement)"))
+        self.cb_swap_model = QComboBox()
+        self._swap_model_keys = list(swap_models.SWAP_MODELS)
+        for key in self._swap_model_keys:
+            label = swap_models.SWAP_MODELS[key]["label"]
+            if not swap_models.is_available(key):
+                label += "  ·  " + _("download ~400 MB")
+            self.cb_swap_model.addItem(label)
+        cur_model = getattr(modules.globals, "swap_model", swap_models.DEFAULT_SWAP_MODEL)
+        if cur_model in self._swap_model_keys:
+            self.cb_swap_model.setCurrentIndex(self._swap_model_keys.index(cur_model))
+        self.cb_swap_model.currentIndexChanged.connect(self._on_swap_model_change)
+        self.cb_swap_model.setToolTip(_(
+            "HyperSwap swaps at 256px: sharper, keeps hands and objects in front of the face, "
+            "and is faster than InSwapper on most GPUs. Models download once when first chosen."))
+        enh_layout.addLayout(_field(_("Swap model"), self.cb_swap_model))
+
         self.cb_detail = QComboBox()
         self._detail_options = [
-            (_("Standard · 128px (fastest)"), 1),
-            (_("High · 256px"), 2),
-            (_("Ultra · 512px (photos & video)"), 4),
+            (_("Standard · model native (fastest)"), 1),
+            (_("High · 2× resolution"), 2),
+            (_("Ultra · 4× resolution (photos & video)"), 4),
         ]
         for label, _v in self._detail_options:
             self.cb_detail.addItem(label)
@@ -887,8 +907,8 @@ class MainWindow(QMainWindow):
             next((i for i, (_l, v) in enumerate(self._detail_options) if v == cur_detail), 0))
         self.cb_detail.currentIndexChanged.connect(self._on_detail_change)
         self.cb_detail.setToolTip(_(
-            "Swaps the face at a higher resolution for sharper eyes, teeth and skin. "
-            "High costs ~3x and Ultra ~12x the time per face, so keep Standard for smooth live video."))
+            "Swaps the face at 2x or 4x the model's resolution for sharper eyes, teeth and skin. "
+            "High costs ~4x and Ultra ~16x the time per face, so keep Standard for smooth live video."))
         row = QHBoxLayout()
         row.setSpacing(16)
         row.addLayout(_field(_("Face detail"), self.cb_detail), 1)
@@ -1177,6 +1197,32 @@ class MainWindow(QMainWindow):
         else:
             modules.globals.face_swapper_enabled = True
             update_status(f"Transparency set to {pct}%")
+
+    def _on_swap_model_change(self, idx: int) -> None:
+        if not (0 <= idx < len(self._swap_model_keys)):
+            return
+        key = self._swap_model_keys[idx]
+        info = swap_models.SWAP_MODELS[key]
+
+        def activate() -> None:
+            modules.globals.swap_model = key
+            save_switch_states()
+            from modules.processors.frame.face_swapper import reset_face_swapper
+            reset_face_swapper()
+            update_status(_("Swap model:") + f" {info['label']}")
+
+        if swap_models.is_available(key):
+            activate()
+            return
+
+        def worker() -> None:
+            if swap_models.download(key, update_status):
+                activate()
+                # Widgets belong to the UI thread; post the label update there.
+                QTimer.singleShot(0, self.cb_swap_model,
+                                  lambda: self.cb_swap_model.setItemText(idx, info["label"]))
+        update_status(_("Downloading") + f" {info['label']}…")
+        threading.Thread(target=worker, daemon=True).start()
 
     def _on_detail_change(self, idx: int) -> None:
         if 0 <= idx < len(self._detail_options):

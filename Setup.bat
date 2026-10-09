@@ -49,6 +49,7 @@ rem --- 4. Models ------------------------------------------------------------
 if not exist models mkdir models
 call :model inswapper_128_fp16.onnx || goto :fail
 call :model gfpgan-1024.onnx || goto :fail
+call :model hyperswap_1b_256.onnx https://huggingface.co/facefusion/models-3.3.0/resolve/main || goto :fail
 
 rem --- 5. Desktop shortcut ---------------------------------------------------
 powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\LiveFaceCam.lnk'); $s.TargetPath='%~dp0Start-LiveFaceCam.bat'; $s.WorkingDirectory='%~dp0'; $s.IconLocation='%~dp0assets\icon.ico'; $s.Save()" >nul 2>nul && echo [OK] Desktop shortcut created
@@ -64,7 +65,9 @@ if exist "models\%~1" (
     exit /b 0
 )
 echo [..] Downloading %~1 ...
-curl.exe -L --fail -o "models\%~1.part" "https://huggingface.co/hacksider/deep-live-cam/resolve/main/%~1?download=true" || exit /b 1
+set "BASE=%~2"
+if not defined BASE set "BASE=https://huggingface.co/hacksider/deep-live-cam/resolve/main"
+curl.exe -L --fail -o "models\%~1.part" "%BASE%/%~1?download=true" || exit /b 1
 move /y "models\%~1.part" "models\%~1" >nul
 exit /b 0
 

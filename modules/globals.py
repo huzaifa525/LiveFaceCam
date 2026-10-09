@@ -61,6 +61,7 @@ fp_ui: Dict[str, bool] = {"face_enhancer": False, "face_enhancer_gpen256": False
 face_swapper_enabled: bool = True # General toggle for the swapper processor
 opacity: float = 1.0              # Blend factor for the swapped face (0.0-1.0)
 sharpness: float = 0.0            # Sharpness enhancement for swapped face (0.0-1.0+)
+swap_model: str = "hyperswap_1b_256"  # see modules/swap_models.py
 face_detail: int = 1             # Swap resolution multiplier: 1=128px, 2=256px, 4=512px
 color_match: bool = False         # Match swapped face skin tone/lighting to the target
 skin_smoothing: float = 0.0       # 0-1 bilateral skin smoothing on the swapped face
