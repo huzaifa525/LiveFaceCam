@@ -22,6 +22,23 @@ IS_APPLE_SILICON = platform.system() == "Darwin" and platform.machine() == "arm6
 THREAD_SEMAPHORE = threading.Semaphore(min(max(1, (os.cpu_count() or 1)), 8))
 
 
+def cuda_provider():
+    """CUDA EP tuned for small-VRAM cards.
+
+    ORT's default arena grows in powers of two and cuDNN may grab a large
+    scratch workspace per conv, so a 4 GB laptop GPU fills up long before the
+    models need it. Growing the arena only by what is requested and capping
+    the workspace keeps every model resident with room to spare. Set
+    LFC_CUDA_LEAN=0 to fall back to ONNX Runtime's defaults.
+    """
+    if os.environ.get("LFC_CUDA_LEAN", "1") == "0":
+        return "CUDAExecutionProvider"
+    return ("CUDAExecutionProvider", {
+        "arena_extend_strategy": "kSameAsRequested",
+        "cudnn_conv_use_max_workspace": "0",
+    })
+
+
 def build_provider_config(providers=None):
     """Wrap raw provider name strings with optimised CUDA / CoreML options.
 
@@ -37,11 +54,7 @@ def build_provider_config(providers=None):
             # Already configured – pass through
             config.append(p)
         elif p == "CUDAExecutionProvider":
-            # Use bare provider — ONNX Runtime's defaults are fastest on
-            # modern GPUs (Blackwell/sm_120).  Custom options like
-            # EXHAUSTIVE cudnn_conv_algo_search hurt performance on these
-            # architectures.
-            config.append(p)
+            config.append(cuda_provider())
         elif p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
             config.append((
                 "CoreMLExecutionProvider",

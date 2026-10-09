@@ -29,8 +29,10 @@
 | Close-up source photos | Often "no face found" | **Detected automatically** |
 | Slow or busy camera | UI freezes ~40 s | **Opens in ~2 s, with a clear warning** |
 | Long GPU videos | VRAM leak can crash | **Fixed** |
+| Speed & memory | ~13 fps, TensorFlow always loaded | **~19 fps, 28% less GPU memory, 1.7 s faster startup** |
 | AMD (DirectML) | Can crash on face analysis | **Fixed** |
-| Face detail | 128px swap | **Up to 512px (pixel boost) for sharper eyes, teeth and skin** |
+| Swap model | InSwapper 128px | **HyperSwap 256px by default: sharper, faster, keeps hands and objects in front of the face** |
+| Face detail | 128px swap | **2× / 4× detail boost for sharper eyes, teeth and skin** |
 | Face editing | None | **Skin-tone match, skin smoothing, brightness, warmth, frame smoothing** |
 
 <p align="center">
@@ -60,7 +62,8 @@
 - **Photo & video face swap**: convert files and save the result
 - **Virtual camera** output for video calls and streaming
 - **Mouth mask**: keep your real mouth for natural lip-sync
-- **Face detail up to 512px**: pixel-boost swapping for sharper eyes, teeth and skin
+- **HyperSwap 256 swap model** (default): sharper faces that respect hands, hair and objects in front of the face; InSwapper 128 still available
+- **Face detail boost** (2× / 4×): pixel-boost swapping for even sharper eyes, teeth and skin
 - **Face editing**: skin-tone match, skin smoothing, brightness, warmth and live frame smoothing
 - **Face enhancers**: GFPGAN, GPEN-256, GPEN-512
 - **Swap all faces** or **map faces** to different people
@@ -343,6 +346,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 
 ## Credits
 
+-   [FaceFusion](https://github.com/facefusion/facefusion): for the [HyperSwap](https://huggingface.co/facefusion/models-3.3.0) face-swap models (ResearchRAIL-MS license, research and non-commercial use) and the pixel-boost technique
 -   **LiveFaceCam is a fork of [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam) by [hacksider](https://github.com/hacksider) and contributors.** All core face-swap technology comes from that project.
 
 -   [ffmpeg](https://ffmpeg.org/): for making video-related operations easy
@@ -362,7 +366,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 
 ## License
 
-LiveFaceCam is licensed under **AGPL-3.0**, like the original project. The face-swap model (insightface `inswapper_128`) is licensed for **non-commercial research use only**, so LiveFaceCam is and will remain a free, non-commercial tool.
+LiveFaceCam is licensed under **AGPL-3.0**, like the original project. The face-swap models (insightface `inswapper_128`, FaceFusion HyperSwap) are licensed for **non-commercial / research use only**, so LiveFaceCam is and will remain a free, non-commercial tool.
 
 ## Star history
 

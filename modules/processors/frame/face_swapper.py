@@ -441,9 +441,8 @@ def get_face_swapper() -> Any:
                             }
                         ))
                     elif p == "CUDAExecutionProvider":
-                        # Use bare provider — ONNX Runtime defaults are
-                        # fastest on modern GPUs (Blackwell/sm_120).
-                        providers_config.append(p)
+                        from modules.processors.frame._onnx_enhancer import cuda_provider
+                        providers_config.append(cuda_provider())
                     elif p == "OpenVINOExecutionProvider":
                         providers_config.append(OPENVINO_PROVIDER_CONFIG)
                     else:

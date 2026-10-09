@@ -17,11 +17,11 @@ try:
 except ImportError:
     HAS_TORCH = False
 import onnxruntime
-try:
-    import tensorflow
-    HAS_TENSORFLOW = True
-except ImportError:
-    HAS_TENSORFLOW = False
+# TensorFlow is only needed by the optional NSFW filter (opennsfw2), so it is
+# no longer imported at startup: that cost ~4 s and ~300 MB of RAM for every
+# user. When the filter does load it, this makes it grow GPU memory on demand
+# instead of grabbing most of the card.
+os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
 
 import modules.globals
 import modules.metadata
@@ -174,7 +174,8 @@ def suggest_execution_threads() -> int:
 
 def limit_resources() -> None:
     # prevent tensorflow memory leak
-    if HAS_TENSORFLOW:
+    tensorflow = sys.modules.get("tensorflow")
+    if tensorflow is not None:
         gpus = tensorflow.config.experimental.list_physical_devices('GPU')
         for gpu in gpus:
             tensorflow.config.experimental.set_memory_growth(gpu, True)
