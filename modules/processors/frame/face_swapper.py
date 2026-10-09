@@ -500,19 +500,30 @@ def _get_soft_alpha(size: int) -> np.ndarray:
     per-frame gives a visually equivalent feather at O(crop_area) cost —
     the feather radius scales naturally with the affine transform.
     """
-    if _paste_cache['alpha_size'] != size:
+    coverage = float(getattr(modules.globals, "mask_coverage", 0.5))
+    feather = float(getattr(modules.globals, "mask_feather", 0.5))
+    key = (size, round(coverage, 2), round(feather, 2))
+    if _paste_cache['alpha_size'] != key:
         # Elliptical (not square) template — matches the gumroad edition's
         # _create_elliptical_mask. A full/eroded square leaves the aligned
         # crop's corners near-opaque, so the swapped square's straight edges
-        # show as a visible box on the face. An ellipse (axes 0.44*size) zeroes
-        # the corners and the heavy blur feathers smoothly into the original.
-        center = (size // 2, size // 2)
-        axes = (int(size * 0.44), int(size * 0.44))
-        mask = np.zeros((size, size), dtype=np.uint8)
-        cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
-        mask = cv2.GaussianBlur(mask, (31, 31), 12)
-        _paste_cache['soft_alpha'] = mask  # uint8 [0, 255] — blended via cv2 SIMD ops
-        _paste_cache['alpha_size'] = size
+        # show as a visible box on the face.
+        # Coverage grows the ellipse and moves it down so the jaw, chin and a
+        # beard are swapped fully instead of fading out in the feather; 0.5
+        # is the original 0.44*size circle. Feather scales the edge blur with
+        # the crop size so 128px and 256px models blend alike.
+        center = (size // 2, int(size * (0.5 + 0.08 * (coverage - 0.5))))
+        axes = (int(size * (0.38 + 0.12 * coverage)), int(size * (0.36 + 0.16 * coverage)))
+        mask = np.zeros((size, size), dtype=np.float32)
+        cv2.ellipse(mask, center, axes, 0, 0, 360, 1.0, -1)
+        mask = cv2.GaussianBlur(mask, (0, 0), max(1.0, size * (0.02 + 0.10 * feather)))
+        # Fade to zero at the crop border so a large ellipse never leaves a
+        # straight seam where the aligned square ends.
+        edge = max(2, size // 24)
+        ramp = np.clip(np.minimum(np.arange(size), np.arange(size)[::-1]) / edge, 0.0, 1.0)
+        mask *= np.minimum.outer(ramp, ramp)
+        _paste_cache['soft_alpha'] = (mask * 255.0).astype(np.uint8)  # uint8 [0, 255] — blended via cv2 SIMD ops
+        _paste_cache['alpha_size'] = key
     return _paste_cache['soft_alpha']
 
 # CUDA graph swap session cache

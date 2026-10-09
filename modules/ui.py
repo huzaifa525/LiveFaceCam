@@ -243,6 +243,8 @@ def save_switch_states():
         "ui_theme": getattr(modules.globals, "ui_theme", "system"),
         "swap_model": getattr(modules.globals, "swap_model", swap_models.DEFAULT_SWAP_MODEL),
         "face_detail": getattr(modules.globals, "face_detail", 1),
+        "mask_coverage": getattr(modules.globals, "mask_coverage", 0.65),
+        "mask_feather": getattr(modules.globals, "mask_feather", 0.45),
         "color_match": getattr(modules.globals, "color_match", False),
         "skin_smoothing": getattr(modules.globals, "skin_smoothing", 0.0),
         "face_brightness": getattr(modules.globals, "face_brightness", 0.0),
@@ -284,6 +286,11 @@ def load_switch_states():
         detail = state.get("face_detail", 1)
         modules.globals.face_detail = detail if detail in (1, 2, 4) else 1
         modules.globals.color_match = bool(state.get("color_match", False))
+        for key, default in (("mask_coverage", 0.65), ("mask_feather", 0.45)):
+            try:
+                setattr(modules.globals, key, min(1.0, max(0.0, float(state.get(key, default)))))
+            except (TypeError, ValueError):
+                setattr(modules.globals, key, default)
         for key, lo, hi in (("skin_smoothing", 0.0, 1.0), ("face_brightness", -1.0, 1.0),
                             ("face_warmth", -1.0, 1.0), ("frame_smoothing", 0.0, 0.8)):
             try:
@@ -958,6 +965,20 @@ class MainWindow(QMainWindow):
         self.s_sharpness = slider(
             2, "Sharpness", "Sharpen the enhanced face output",
             0.0, 5.0, 0.0, 10, self._on_sharpness_change, lambda v: f"{v:.1f}")
+        self.s_coverage = slider(
+            3, "Face coverage",
+            "How much of the head the new face covers. Raise it so the jaw, chin and a beard "
+            "are swapped fully instead of fading out at the edge.",
+            0.0, 100.0, float(getattr(modules.globals, "mask_coverage", 0.65)) * 100, 1,
+            self._on_coverage_change, lambda v: f"{int(v)}")
+        self.s_feather = slider(
+            4, "Edge softness",
+            "How gradually the new face blends into yours. Lower gives a crisper jawline, "
+            "higher hides seams in difficult lighting.",
+            0.0, 100.0, float(getattr(modules.globals, "mask_feather", 0.45)) * 100, 1,
+            self._on_feather_change, lambda v: f"{int(v)}")
+        self.s_coverage.sliderReleased.connect(save_switch_states)
+        self.s_feather.sliderReleased.connect(save_switch_states)
         grid.setColumnStretch(1, 1)
         blend_layout.addLayout(grid)
         body.addWidget(blend)
@@ -1230,6 +1251,12 @@ class MainWindow(QMainWindow):
             modules.globals.face_detail = value
             save_switch_states()
             update_status(_("Face detail:") + f" {label}")
+
+    def _on_coverage_change(self, value: float) -> None:
+        modules.globals.mask_coverage = value / 100.0
+
+    def _on_feather_change(self, value: float) -> None:
+        modules.globals.mask_feather = value / 100.0
 
     def _on_sharpness_change(self, value: float) -> None:
         modules.globals.sharpness = value
