@@ -247,6 +247,7 @@ def save_switch_states():
         "mask_coverage": getattr(modules.globals, "mask_coverage", 0.65),
         "mask_feather": getattr(modules.globals, "mask_feather", 0.45),
         "color_match": getattr(modules.globals, "color_match", False),
+        "remove_beard": getattr(modules.globals, "remove_beard", False),
         "skin_smoothing": getattr(modules.globals, "skin_smoothing", 0.0),
         "face_brightness": getattr(modules.globals, "face_brightness", 0.0),
         "face_warmth": getattr(modules.globals, "face_warmth", 0.0),
@@ -287,6 +288,7 @@ def load_switch_states():
         detail = state.get("face_detail", 1)
         modules.globals.face_detail = detail if detail in (1, 2, 4) else 1
         modules.globals.color_match = bool(state.get("color_match", False))
+        modules.globals.remove_beard = bool(state.get("remove_beard", False))
         for key, default in (("mask_coverage", 0.65), ("mask_feather", 0.45)):
             try:
                 setattr(modules.globals, key, min(1.0, max(0.0, float(state.get(key, default)))))
@@ -994,6 +996,11 @@ class MainWindow(QMainWindow):
 
         edit, edit_layout = _card(_("Face editing"),
                                   _("Adjust the swapped face itself. Cheap enough to use live."))
+        self.sw_remove_beard = self._make_switch(
+            "remove_beard", "Remove beard",
+            "Paint skin over your beard and stubble before swapping, so a clean-shaven face stays clean-shaven",
+            "Removes your beard and stubble from the swapped face. Best with a clean-shaven source photo.")
+        edit_layout.addWidget(self.sw_remove_beard)
         self.sw_color_match = self._make_switch(
             "color_match", "Match skin tone",
             "Match the new face's skin tone and lighting to the scene",
@@ -1563,7 +1570,8 @@ class _ProcessingWorker(QThread):
                 # Fast detection skips the 2d106 landmark model, but the mouth
                 # mask needs it. Attach landmarks on demand (computed once per
                 # detection cycle — the helper no-ops if already present).
-                if modules.globals.mouth_mask and cached_faces:
+                needs_landmarks = modules.globals.mouth_mask or modules.globals.remove_beard
+                if needs_landmarks and cached_faces:
                     ensure_landmarks(temp_frame, cached_faces)
 
                 for fp in frame_processors:

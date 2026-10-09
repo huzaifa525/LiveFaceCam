@@ -54,6 +54,7 @@ Status: ✅ done · 🚧 in progress · ⬜ to do
 | F6 | **GPU self-check** with fix-it hints (CUDA/cuDNN DLLs, provider actually loaded). | Issues review | Easier setup | M | ⬜ |
 | F7 | **Portable installer, auto-update, rollback.** | Codex (competitors) | Easier distribution | L | ⬜ |
 | F8 | **Voice changer / audio routing.** | Codex (Magicam, Akool) | Full live-persona feature | L | ⬜ |
+| F10 | **Remove beard** checkbox: paint cheek-skin colour over beard/stubble in the aligned target crop before swapping, and reach over the jaw. ~8 ms/frame. Works for stubble and short beards; very full beards would need a trained removal model. Possible follow-ups: temporal mask smoothing, protect nostrils, skip large patches. | User idea + Codex review | Clean-shaven swaps on bearded users | M | ✅ |
 | F9 | **Demo GIF + launch posts** (r/StableDiffusion, Show HN, awesome-lists). | Marketing research | Stars and downloads | S | ⬜ |
 
 ## 4. Recommended order

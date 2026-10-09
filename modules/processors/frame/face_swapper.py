@@ -158,6 +158,58 @@ class HyperSwapper:
         return np.ascontiguousarray(fake[:, :, ::-1]), mask[0, 0].clip(0.0, 1.0)
 
 
+
+def _preshave_crop(crop: np.ndarray, lm: np.ndarray) -> np.ndarray:
+    """Paint skin over beard and stubble in the aligned target crop.
+
+    The swap models rebuild the face from the target crop's pixels, so a
+    beard on camera leaks into the swap even when the source face is clean
+    shaven. Below the nose, hair-like pixels (darker than the cheek skin in
+    LAB, or strongly textured) are replaced with that cheek skin colour
+    before the crop goes to the swapper, which then renders smooth skin.
+    Lips are left alone. `lm` is the 106-point landmark set in crop space.
+    """
+    size = crop.shape[0]
+    eyes_y = (lm[33:43, 1].mean() + lm[87:97, 1].mean()) / 2.0
+    mouth = lm[52:72]
+    mouth_top = mouth[:, 1].min()
+    y_cut = mouth_top - 0.45 * (mouth_top - eyes_y)
+    contour = lm[0:33]
+    below = contour[contour[:, 1] > y_cut]
+    if len(below) < 3:
+        return crop
+    region = np.zeros((size, size), np.uint8)
+    pts = np.vstack([below, [[contour[:, 0].max(), y_cut], [contour[:, 0].min(), y_cut]]])
+    cv2.fillConvexPoly(region, cv2.convexHull(pts.astype(np.int32)), 255)
+    centre = mouth.mean(axis=0)
+    lips = cv2.convexHull(((mouth - centre) * 1.12 + centre).astype(np.int32))
+    cv2.fillConvexPoly(region, lips, 0)
+
+    lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)
+    yc0, yc1 = int(eyes_y + 0.25 * (y_cut - eyes_y)), int(y_cut)
+    patches = []
+    for eye in (lm[33:43], lm[87:97]):
+        x0, x1 = int(eye[:, 0].min()), int(eye[:, 0].max())
+        if yc1 > yc0 and x1 > x0:
+            patches.append(lab[max(0, yc0):yc1, max(0, x0):x1].reshape(-1, 3))
+    if not patches:
+        return crop
+    ref = np.median(np.concatenate(patches), axis=0)
+
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    texture = cv2.absdiff(gray, cv2.GaussianBlur(gray, (0, 0), 2))
+    hair = ((lab[..., 0].astype(np.float32) < ref[0] - 10) | (texture > 6)).astype(np.uint8) * 255
+    hair = cv2.bitwise_and(hair, region)
+    kernel = np.ones((max(3, size // 50),) * 2, np.uint8)
+    hair = cv2.dilate(cv2.morphologyEx(hair, cv2.MORPH_CLOSE, kernel), np.ones((3, 3), np.uint8))
+
+    skin = np.empty_like(lab)
+    skin[:] = ref.astype(np.uint8)
+    skin_bgr = cv2.cvtColor(skin, cv2.COLOR_LAB2BGR)
+    alpha = cv2.GaussianBlur(hair.astype(np.float32) / 255.0, (0, 0), max(1.0, size / 85.0))[..., None]
+    return (crop * (1.0 - alpha) + skin_bgr * alpha).astype(np.uint8)
+
+
 def _inswapper_swap_crop(face_swapper: Any, crop_bgr: np.ndarray, latent: np.ndarray) -> np.ndarray:
     mean = face_swapper.input_mean
     blob = cv2.dnn.blobFromImage(np.ascontiguousarray(crop_bgr), 1.0 / face_swapper.input_std,
@@ -183,12 +235,19 @@ def _run_swapper(face_swapper: Any, img: Frame, target_face: Face,
     boost = 1 if _is_live_thread() else max(1, int(getattr(modules.globals, "face_detail", 1) or 1))
     size = face_swapper.input_size[0]
     is_hyper = isinstance(face_swapper, HyperSwapper)
-    if boost == 1 and not is_hyper:
+    landmarks = getattr(target_face, "landmark_2d_106", None)
+    shave = bool(getattr(modules.globals, "remove_beard", False)) and landmarks is not None
+    if boost == 1 and not is_hyper and not shave:
         bgr_fake, M = face_swapper.get(img, target_face, source_face, paste_back=False)
         return bgr_fake, M, None
 
     crop = size * boost
     aimg, M = face_align.norm_crop2(img, target_face.kps, crop)
+    if shave:
+        try:
+            aimg = _preshave_crop(aimg, cv2.transform(landmarks[None].astype(np.float32), M)[0])
+        except cv2.error:
+            pass
     if is_hyper:
         def swap_tile(tile):
             return face_swapper.swap_crop(tile, source_face)
@@ -503,6 +562,9 @@ def _get_soft_alpha(size: int) -> np.ndarray:
     the feather radius scales naturally with the affine transform.
     """
     coverage = float(getattr(modules.globals, "mask_coverage", 0.5))
+    if getattr(modules.globals, "remove_beard", False):
+        # Reach over the jaw so the real beard doesn't show around the swap.
+        coverage = max(coverage, 0.85)
     feather = float(getattr(modules.globals, "mask_feather", 0.5))
     key = (size, round(coverage, 2), round(feather, 2))
     if _paste_cache['alpha_size'] != key:
