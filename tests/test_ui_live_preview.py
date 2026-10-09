@@ -200,6 +200,7 @@ class SourceReloadTest(unittest.TestCase):
 
         with patch.object(ui, "imread_unicode", fake_imread), \
              patch.object(ui, "get_one_face", lambda *_: object()), \
+             patch.object(ui, "get_source_face", lambda *_: object()), \
              patch.object(ui, "get_frame_processors_modules", lambda *_: []), \
              patch.object(ui, "detect_one_face_fast", lambda *_: None), \
              patch.object(ui, "detect_many_faces_fast", lambda *_: None), \

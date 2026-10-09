@@ -65,6 +65,8 @@ swap_model: str = "hyperswap_1b_256"  # see modules/swap_models.py
 face_detail: int = 1             # Swap resolution multiplier: 1=128px, 2=256px, 4=512px
 mask_coverage: float = 0.65       # 0-1 how far the swap mask reaches (0.5 = original); higher covers jaw/chin/beard
 mask_feather: float = 0.45        # 0-1 edge softness of the swap mask
+restore_mouth: float = 0.0        # 0-1 blend the real mouth back in (natural speech)
+restore_eyes: float = 0.0         # 0-1 blend the real eyes back in (natural blinks/gaze)
 color_match: bool = False         # Match swapped face skin tone/lighting to the target
 skin_smoothing: float = 0.0       # 0-1 bilateral skin smoothing on the swapped face
 face_brightness: float = 0.0      # -1..1 brightness shift on the swapped face

@@ -245,6 +245,8 @@ def save_switch_states():
         "swap_model": getattr(modules.globals, "swap_model", swap_models.DEFAULT_SWAP_MODEL),
         "face_detail": getattr(modules.globals, "face_detail", 1),
         "mask_coverage": getattr(modules.globals, "mask_coverage", 0.65),
+        "restore_mouth": getattr(modules.globals, "restore_mouth", 0.0),
+        "restore_eyes": getattr(modules.globals, "restore_eyes", 0.0),
         "mask_feather": getattr(modules.globals, "mask_feather", 0.45),
         "color_match": getattr(modules.globals, "color_match", False),
         "skin_smoothing": getattr(modules.globals, "skin_smoothing", 0.0),
@@ -287,7 +289,8 @@ def load_switch_states():
         detail = state.get("face_detail", 1)
         modules.globals.face_detail = detail if detail in (1, 2, 4) else 1
         modules.globals.color_match = bool(state.get("color_match", False))
-        for key, default in (("mask_coverage", 0.65), ("mask_feather", 0.45)):
+        for key, default in (("mask_coverage", 0.65), ("mask_feather", 0.45),
+                             ("restore_mouth", 0.0), ("restore_eyes", 0.0)):
             try:
                 setattr(modules.globals, key, min(1.0, max(0.0, float(state.get(key, default)))))
             except (TypeError, ValueError):
@@ -992,6 +995,46 @@ class MainWindow(QMainWindow):
         blend_layout.addLayout(grid)
         body.addWidget(blend)
 
+        expr, expr_layout = _card(
+            _("Expression"),
+            _("Keep your real mouth and eyes so talking, smiling and blinking look natural. "
+              "Higher shows more of you, lower more of the new face."))
+        expr_grid = QGridLayout()
+        expr_grid.setHorizontalSpacing(16)
+        expr_grid.setVerticalSpacing(14)
+
+        def expr_slider(row, name, tip, field):
+            lab = QLabel(_(name))
+            lab.setMinimumWidth(110)
+            expr_grid.addWidget(lab, row, 0)
+            s_ = QSlider(Qt.Orientation.Horizontal)
+            s_.setRange(0, 100)
+            s_.setValue(int(round(float(getattr(modules.globals, field, 0.0)) * 100)))
+            s_.setToolTip(_(tip))
+            value = QLabel(str(s_.value()))
+            value.setObjectName("sliderValue")
+            value.setMinimumWidth(40)
+            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+            def changed(iv, f=field, lbl=value):
+                lbl.setText(str(iv))
+                setattr(modules.globals, f, iv / 100.0)
+            s_.valueChanged.connect(changed)
+            s_.sliderReleased.connect(save_switch_states)
+            expr_grid.addWidget(s_, row, 1)
+            expr_grid.addWidget(value, row, 2)
+            return s_
+
+        self.s_restore_mouth = expr_slider(
+            0, "Real mouth", "Blend your real lips, teeth and tongue back in so speech is in sync",
+            "restore_mouth")
+        self.s_restore_eyes = expr_slider(
+            1, "Real eyes", "Blend your real eyes back in for natural blinks and gaze",
+            "restore_eyes")
+        expr_grid.setColumnStretch(1, 1)
+        expr_layout.addLayout(expr_grid)
+        body.addWidget(expr)
+
         edit, edit_layout = _card(_("Face editing"),
                                   _("Adjust the swapped face itself. Cheap enough to use live."))
         self.sw_color_match = self._make_switch(
@@ -1563,7 +1606,10 @@ class _ProcessingWorker(QThread):
                 # Fast detection skips the 2d106 landmark model, but the mouth
                 # mask needs it. Attach landmarks on demand (computed once per
                 # detection cycle — the helper no-ops if already present).
-                if modules.globals.mouth_mask and cached_faces:
+                needs_landmarks = (modules.globals.mouth_mask
+                                   or getattr(modules.globals, "restore_mouth", 0) > 0
+                                   or getattr(modules.globals, "restore_eyes", 0) > 0)
+                if needs_landmarks and cached_faces:
                     ensure_landmarks(temp_frame, cached_faces)
 
                 for fp in frame_processors:
