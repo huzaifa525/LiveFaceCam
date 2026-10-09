@@ -40,7 +40,8 @@ if not exist "venv\Scripts\python.exe" (
     echo [..] Creating virtual environment...
     %PY% -m venv venv || goto :fail
 )
-echo [..] Installing dependencies ^(first time takes 5-15 minutes, ~5 GB^)...
+echo [..] Installing dependencies ^(first time takes 5-15 minutes, ~6 GB^)...
+"venv\Scripts\python.exe" -m pip --version >nul 2>nul || "venv\Scripts\python.exe" -m ensurepip --upgrade >nul
 "venv\Scripts\python.exe" -m pip install --upgrade pip >nul
 "venv\Scripts\python.exe" -m pip install -r requirements.txt || goto :fail
 

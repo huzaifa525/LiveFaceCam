@@ -17,7 +17,6 @@ import sys
 import tempfile
 import threading
 import time
-import webbrowser
 from typing import Callable, List, Optional, Tuple
 
 import cv2
@@ -35,13 +34,11 @@ from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
-    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
     QFrame,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
