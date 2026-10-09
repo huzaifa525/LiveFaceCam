@@ -25,6 +25,20 @@ import time
 
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
+
+# The live webcam loop marks its worker thread so frame-rate-heavy options
+# (detail boost, Poisson blending) are skipped there: at 1080p they took live
+# preview from ~22 fps to ~5 fps, which froze lip movement and made the face
+# jump on head turns. They still apply to photo and video conversion.
+_THREAD_MODE = threading.local()
+
+
+def set_live_thread(live: bool) -> None:
+    _THREAD_MODE.live = live
+
+
+def _is_live_thread() -> bool:
+    return getattr(_THREAD_MODE, "live", False)
 NAME = "DLC.FACE-SWAPPER"
 
 # --- START: Added for Interpolation ---
@@ -178,7 +192,7 @@ def _run_swapper(face_swapper: Any, img: Frame, target_face: Face,
     FaceFusion's pixel boost: real detail in eyes, teeth and skin at boost^2
     the inference cost.
     """
-    boost = max(1, int(getattr(modules.globals, "face_detail", 1) or 1))
+    boost = 1 if _is_live_thread() else max(1, int(getattr(modules.globals, "face_detail", 1) or 1))
     size = face_swapper.input_size[0]
     is_hyper = isinstance(face_swapper, HyperSwapper)
     if boost == 1 and not is_hyper:
@@ -725,7 +739,7 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     opacity = getattr(modules.globals, "opacity", 1.0)
     opacity = max(0.0, min(1.0, opacity))
     mouth_mask_enabled = getattr(modules.globals, "mouth_mask", False)
-    poisson_blend_enabled = getattr(modules.globals, "poisson_blend", False)
+    poisson_blend_enabled = getattr(modules.globals, "poisson_blend", False) and not _is_live_thread()
     # Poisson blend's seamlessClone needs the genuine pre-swap frame as its
     # destination. Without this, original_frame aliases temp_frame, which
     # _fast_paste_back mutates in place — so seamlessClone would blend the
@@ -799,7 +813,7 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     # Mask derived from the swap's own affine (M) + swapped pixels (bgr_fake),
     # so it tracks the swapped face exactly per-frame — no landmark jitter,
     # no EMA, no lag. See _apply_poisson_blend.
-    if getattr(modules.globals, "poisson_blend", False):
+    if poisson_blend_enabled:
         swapped_frame = _apply_poisson_blend(
             swapped_frame, original_frame, target_face, M, bgr_fake
         )

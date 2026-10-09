@@ -442,6 +442,13 @@ def _card(title: str = "", description: str = "") -> Tuple[QFrame, QVBoxLayout]:
     return frame, layout
 
 
+def _hint(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("hint")
+    label.setWordWrap(True)
+    return label
+
+
 def _rule() -> QFrame:
     line = QFrame()
     line.setObjectName("rule")
@@ -918,9 +925,10 @@ class MainWindow(QMainWindow):
             "High costs ~4x and Ultra ~16x the time per face, so keep Standard for smooth live video."))
         row = QHBoxLayout()
         row.setSpacing(16)
-        row.addLayout(_field(_("Face detail"), self.cb_detail), 1)
+        row.addLayout(_field(_("Face detail (photos & video)"), self.cb_detail), 1)
         row.addLayout(_field(_("Enhancer model"), self.cb_enhancer), 1)
         enh_layout.addLayout(row)
+        enh_layout.addWidget(_hint(_("Face detail applies to photos and videos; live webcam always uses Standard so lips and head movement stay smooth.")))
         body.addWidget(enh)
 
         blend, blend_layout = _card(_("Blending"), _("Control how strongly the new face is applied."))
@@ -1040,7 +1048,7 @@ class MainWindow(QMainWindow):
             "Replace every face in view, not just the main one.")
         self.sw_poisson = self._make_switch(
             "poisson_blend", "Smooth edges", "Blend face edges smoothly using Poisson blending",
-            "Seamless blending around the face edge. Slower.")
+            "Seamless blending around the face edge, for photos and videos (skipped live to keep it smooth).")
         # Map faces is special — closes mapper when toggled off.
         self.sw_map_faces = SwitchRow(
             _("Map faces"), modules.globals.map_faces,
@@ -1474,6 +1482,8 @@ class _ProcessingWorker(QThread):
         self._fps = camera_fps
 
     def run(self) -> None:
+        from modules.processors.frame.face_swapper import set_live_thread
+        set_live_thread(True)
         vcam = VirtualCamOutput()
         try:
             self._run_loop(vcam)
