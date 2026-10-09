@@ -34,6 +34,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -48,8 +49,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSlider,
-    QTabWidget,
-    QToolButton,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -80,6 +80,13 @@ from modules.utilities import (
 )
 from modules import imread_unicode
 from modules.virtual_camera import VirtualCamOutput
+from modules.ui_theme import (
+    THEME_MODES,
+    SwitchRow,
+    apply_theme,
+    bind_icon,
+    eyebrow,
+)
 from modules.video_capture import VideoCapturer
 
 if platform.system() == "Windows":
@@ -90,9 +97,9 @@ import json
 
 # ─── constants ────────────────────────────────────────────────────────────
 
-ROOT_HEIGHT = 860
-ROOT_WIDTH = 540
-THUMB_SIZE = 132
+ROOT_HEIGHT = 640
+ROOT_WIDTH = 900
+THUMB_SIZE = 236
 
 PREVIEW_MAX_HEIGHT = 700
 PREVIEW_MAX_WIDTH = 1200
@@ -115,96 +122,7 @@ SOURCE_TARGET_PREVIEW_SIZE = 200
 
 # ─── modern dark stylesheet ───────────────────────────────────────────────
 
-QSS = """
-QMainWindow, QDialog { background-color: #15161a; color: #e8e9ee; }
-QWidget { color: #e8e9ee; font-family: "Segoe UI", "SF Pro Display", "Helvetica Neue", Arial, sans-serif; font-size: 10pt; }
-QWidget#body, QScrollArea, QScrollArea > QWidget > QWidget { background: #15161a; border: none; }
-QToolTip { background: #24262d; color: #e8e9ee; border: 1px solid #3a3d47; padding: 6px; border-radius: 6px; }
-
-QLabel#appTitle { font-size: 18pt; font-weight: 700; color: #ffffff; }
-QLabel#appSubtitle { color: #8b8f9c; font-size: 10pt; }
-QLabel#cardTitle { font-size: 11pt; font-weight: 600; color: #ffffff; }
-QLabel#fieldLabel { color: #b4b8c4; font-weight: 600; min-width: 70px; }
-QLabel#hint { color: #8b8f9c; font-size: 9pt; }
-QLabel#sliderValue { color: #b4b8c4; font-size: 9pt; }
-
-QFrame#card { background-color: #1e2026; border: 1px solid #2a2d35; border-radius: 12px; }
-QFrame#tabPage { background-color: #1e2026; border: 1px solid #2a2d35; border-top: none;
-                 border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; }
-QFrame#footer { background-color: #1a1b20; border-top: 1px solid #2a2d35; }
-
-QTabWidget#modeTabs, QTabWidget#modeTabs QTabBar { background: #15161a; }
-QTabWidget#modeTabs::pane { border: none; }
-QTabBar::tear { width: 0; }
-QTabBar::tab {
-    background: #1a1b20; color: #8b8f9c;
-    border: 1px solid #2a2d35; border-bottom: none;
-    padding: 9px 18px; margin-right: 4px; font-weight: 600;
-    border-top-left-radius: 10px; border-top-right-radius: 10px;
-}
-QTabBar::tab:selected { background: #1e2026; color: #ffffff; border-bottom: 2px solid #6d5dfc; }
-QTabBar::tab:hover:!selected { color: #d0d3dc; }
-
-QPushButton {
-    background-color: #6d5dfc; color: white; border: none;
-    border-radius: 8px; padding: 8px 14px; font-weight: 600;
-}
-QPushButton:hover   { background-color: #7f71ff; }
-QPushButton:pressed { background-color: #5a4ae0; }
-QPushButton:disabled { background-color: #33353d; color: #6f7380; }
-QPushButton#secondary { background-color: #2a2d35; color: #e8e9ee; }
-QPushButton#secondary:hover { background-color: #343844; }
-QPushButton#primaryLarge { padding: 12px 16px; font-size: 11pt; border-radius: 10px; }
-QPushButton#ghostDanger { background: transparent; color: #f07a6a; border: 1px solid #4a2e2b; padding: 6px 14px; }
-QPushButton#ghostDanger:hover { background: #3a2422; }
-QPushButton#danger { background-color: #c2412d; }
-QPushButton#danger:hover  { background-color: #d8523c; }
-
-QToolButton#collapseHeader {
-    background: transparent; border: none; color: #e8e9ee;
-    font-size: 11pt; font-weight: 600; padding: 2px 0; text-align: left;
-}
-QToolButton#collapseHeader:hover { color: #a99fff; }
-
-QComboBox {
-    background-color: #24262d; border: 1px solid #343844;
-    border-radius: 8px; padding: 6px 10px; min-height: 22px;
-}
-QComboBox:hover { border-color: #6d5dfc; }
-QComboBox::drop-down { border: none; width: 22px; }
-QComboBox QAbstractItemView {
-    background-color: #24262d; selection-background-color: #6d5dfc;
-    border: 1px solid #343844; outline: none;
-}
-
-QCheckBox { spacing: 10px; padding: 5px 0; }
-QCheckBox::indicator { width: 34px; height: 18px; border-radius: 9px; background-color: #343844; }
-QCheckBox::indicator:checked { background-color: #6d5dfc; }
-QCheckBox::indicator:hover { border: 1px solid #6d5dfc; }
-
-QSlider::groove:horizontal { height: 6px; background: #343844; border-radius: 3px; }
-QSlider::handle:horizontal {
-    background: #ffffff; width: 16px; height: 16px; margin: -5px 0; border-radius: 8px;
-}
-QSlider::sub-page:horizontal { background: #6d5dfc; border-radius: 3px; }
-
-QLabel#imageDrop {
-    background-color: #24262d; border: 2px dashed #3a3d47; border-radius: 10px;
-    color: #6f7380; font-size: 9pt;
-}
-QLabel#statusLabel { color: #8b8f9c; font-size: 9pt; }
-QLabel#linkLabel { color: #a99fff; text-decoration: underline; }
-
-QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
-QScrollBar::handle:vertical { background: #343844; border-radius: 4px; min-height: 30px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-
-QGroupBox {
-    background-color: #1e2026; border: 1px solid #2a2d35; border-radius: 12px;
-    margin-top: 14px; padding-top: 18px; font-weight: 600;
-}
-QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; color: #a99fff; }
-"""
+QSS = ""  # stylesheet is generated by modules.ui_theme.build_qss()
 
 
 # ─── module-level state ───────────────────────────────────────────────────
@@ -321,6 +239,7 @@ def save_switch_states():
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
         "virtual_camera": modules.globals.virtual_camera,
+        "ui_theme": getattr(modules.globals, "ui_theme", "system"),
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mouth_mask_size": modules.globals.mouth_mask_size,
@@ -351,6 +270,7 @@ def load_switch_states():
         modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = state.get("show_fps", False)
         modules.globals.virtual_camera = state.get("virtual_camera", False)
+        modules.globals.ui_theme = state.get("ui_theme", "system")
         # Mouth mask always starts disabled (slider at 0) on launch,
         # regardless of the persisted value — enable it explicitly each session.
         modules.globals.mouth_mask_size = 0.0
@@ -466,134 +386,260 @@ def _make_image_drop(text: str, size: Tuple[int, int]) -> QLabel:
     return label
 
 
-class _Switch(QWidget):
-    """Compact toggle switch with label + optional tooltip."""
-
-    toggled = Signal(bool)
-
-    def __init__(self, text: str, initial: bool, tooltip: str = ""):
-        super().__init__()
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        self._checkbox = QCheckBox(text)
-        self._checkbox.setChecked(initial)
-        self._checkbox.toggled.connect(self.toggled.emit)
-        if tooltip:
-            self._checkbox.setToolTip(tooltip)
-        layout.addWidget(self._checkbox)
-        layout.addStretch(1)
-
-    def isChecked(self) -> bool:
-        return self._checkbox.isChecked()
-
-    def setChecked(self, value: bool) -> None:
-        self._checkbox.setChecked(value)
+_Switch = SwitchRow
 
 
-class _Collapsible(QWidget):
-    """Section with a clickable header that shows/hides its body."""
-
-    def __init__(self, title: str, expanded: bool = False):
-        super().__init__()
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(6)
-        self._title = title
-        self._toggle = QToolButton()
-        self._toggle.setObjectName("collapseHeader")
-        self._toggle.setCheckable(True)
-        self._toggle.setChecked(expanded)
-        self._toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self._toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._toggle.toggled.connect(self._on_toggled)
-        outer.addWidget(self._toggle)
-        self.body = QWidget()
-        outer.addWidget(self.body)
-        self._on_toggled(expanded)
-
-    def _on_toggled(self, expanded: bool) -> None:
-        self._toggle.setText(("▾  " if expanded else "▸  ") + self._title)
-        self.body.setVisible(expanded)
-
-
-def _card(title: str = "") -> Tuple[QFrame, QVBoxLayout]:
+def _card(title: str = "", description: str = "") -> Tuple[QFrame, QVBoxLayout]:
     frame = QFrame()
     frame.setObjectName("card")
     layout = QVBoxLayout(frame)
-    layout.setContentsMargins(16, 14, 16, 16)
-    layout.setSpacing(10)
+    layout.setContentsMargins(20, 18, 20, 20)
+    layout.setSpacing(12)
     if title:
+        head = QVBoxLayout()
+        head.setSpacing(2)
         heading = QLabel(title)
         heading.setObjectName("cardTitle")
-        layout.addWidget(heading)
+        head.addWidget(heading)
+        if description:
+            desc = QLabel(description)
+            desc.setObjectName("cardDesc")
+            desc.setWordWrap(True)
+            head.addWidget(desc)
+        layout.addLayout(head)
     return frame, layout
 
 
-def _hint(text: str) -> QLabel:
-    label = QLabel(text)
-    label.setObjectName("hint")
-    label.setWordWrap(True)
-    return label
+def _rule() -> QFrame:
+    line = QFrame()
+    line.setObjectName("rule")
+    return line
+
+
+def _field(label: str, widget: QWidget) -> QVBoxLayout:
+    col = QVBoxLayout()
+    col.setSpacing(6)
+    lab = QLabel(label)
+    lab.setObjectName("fieldLabel")
+    col.addWidget(lab)
+    col.addWidget(widget)
+    return col
+
+
+def _button(text: str, variant: str = "", icon_name: str = "", icon_role: str = "fg",
+            size: str = "") -> QPushButton:
+    btn = QPushButton(text)
+    if variant:
+        btn.setProperty("variant", variant)
+    if size:
+        btn.setProperty("size", size)
+    if icon_name:
+        bind_icon(btn, icon_name, icon_role)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    return btn
 
 
 class MainWindow(QMainWindow):
+    PAGE_LIVE, PAGE_FILE, PAGE_QUALITY = 0, 1, 2
+
     def __init__(self, start_cb: Callable, destroy_cb: Callable):
         super().__init__()
         load_switch_states()
         self._start_cb = start_cb
         self._destroy_cb = destroy_cb
 
-        self.setWindowTitle(
-            f"{modules.metadata.name} {modules.metadata.version} {modules.metadata.edition}"
-        )
-        self.setMinimumSize(ROOT_WIDTH, 560)
-        self.resize(ROOT_WIDTH, ROOT_HEIGHT)
-
-        # Scrollable body so nothing gets squashed on small screens.
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        body = QWidget()
-        body.setObjectName("body")
-        scroll.setWidget(body)
-
-        layout = QVBoxLayout(body)
-        layout.setContentsMargins(18, 16, 18, 12)
-        layout.setSpacing(14)
-
-        layout.addLayout(self._build_header())
-        layout.addWidget(self._build_face_card())
-        layout.addWidget(self._build_mode_tabs())
-        layout.addWidget(self._build_quality_card())
-        layout.addStretch(1)
-
-        # Fixed footer: status + quit, always visible.
-        footer = QFrame()
-        footer.setObjectName("footer")
-        f_row = QHBoxLayout(footer)
-        f_row.setContentsMargins(18, 8, 18, 8)
-        self._status_label = QLabel(_("Ready"))
-        self._status_label.setObjectName("statusLabel")
-        self._status_label.setWordWrap(True)
-        f_row.addWidget(self._status_label, 1)
-        self.btn_destroy = QPushButton(_("Quit"))
-        self.btn_destroy.setObjectName("ghostDanger")
-        self.btn_destroy.setToolTip(_("Stop everything and close the application"))
-        self.btn_destroy.clicked.connect(lambda: self._destroy_cb())
-        f_row.addWidget(self.btn_destroy)
+        self.setWindowTitle(f"{modules.metadata.name} {modules.metadata.version}")
+        self.setMinimumSize(ROOT_WIDTH, ROOT_HEIGHT)
+        self.resize(1080, 760)
 
         root = QWidget()
-        root_layout = QVBoxLayout(root)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
-        root_layout.addWidget(scroll, 1)
-        root_layout.addWidget(footer)
+        row = QHBoxLayout(root)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        row.addWidget(self._build_sidebar())
+
+        content = QWidget()
+        content.setObjectName("content")
+        col = QVBoxLayout(content)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(0)
+
+        self._face_card = self._build_face_card()
+        self._face_slots = {}
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._scroll(self._build_live_page()))
+        self._stack.addWidget(self._scroll(self._build_file_page()))
+        self._stack.addWidget(self._scroll(self._build_quality_page()))
+        col.addWidget(self._stack, 1)
+        col.addWidget(self._build_status_bar())
+        row.addWidget(content, 1)
         self.setCentralWidget(root)
+
+        self._nav_buttons[self.PAGE_LIVE].setChecked(True)
+        self._show_page(self.PAGE_LIVE)
+
+    # ── shell ────────────────────────────────────────────────────────────
+
+    def _build_sidebar(self) -> QFrame:
+        bar = QFrame()
+        bar.setObjectName("sidebar")
+        bar.setFixedWidth(232)
+        col = QVBoxLayout(bar)
+        col.setContentsMargins(12, 16, 12, 12)
+        col.setSpacing(2)
+
+        brand = QHBoxLayout()
+        brand.setContentsMargins(8, 0, 0, 0)
+        brand.setSpacing(10)
+        chip = QLabel()
+        chip.setObjectName("logoChip")
+        chip.setFixedSize(28, 28)
+        chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        bind_icon(chip, "scan-face", "primary_fg", 16)
+        brand.addWidget(chip)
+        names = QVBoxLayout()
+        names.setSpacing(0)
+        title = QLabel(modules.metadata.name)
+        title.setObjectName("brand")
+        version = QLabel(f"v{modules.metadata.version} · {_('Open source')}")
+        version.setObjectName("brandVersion")
+        names.addWidget(title)
+        names.addWidget(version)
+        brand.addLayout(names, 1)
+        col.addLayout(brand)
+        col.addSpacing(22)
+
+        nav_label = eyebrow(_("Workspace"))
+        nav_label.setContentsMargins(12, 0, 0, 4)
+        col.addWidget(nav_label)
+
+        self._nav_group = QButtonGroup(self)
+        self._nav_group.setExclusive(True)
+        self._nav_buttons = []
+        for idx, (text, icon_name) in enumerate([
+            (_("Live webcam"), "video"),
+            (_("Photo && Video"), "image"),
+            (_("Face quality"), "sliders-horizontal"),
+        ]):
+            btn = QPushButton(text)
+            btn.setObjectName("navItem")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            bind_icon(btn, icon_name, "muted_fg")
+            btn.clicked.connect(lambda _c=False, i=idx: self._show_page(i))
+            self._nav_group.addButton(btn, idx)
+            self._nav_buttons.append(btn)
+            col.addWidget(btn)
+
+        col.addStretch(1)
+        rule = QFrame()
+        rule.setObjectName("sidebarRule")
+        col.addWidget(rule)
+        col.addSpacing(6)
+
+        self.btn_theme = QPushButton()
+        self.btn_theme.setObjectName("navItem")
+        self.btn_theme.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_theme.setToolTip(_("Switch between system, light and dark theme"))
+        self.btn_theme.clicked.connect(self._on_cycle_theme)
+        col.addWidget(self.btn_theme)
+        self._refresh_theme_button()
+
+        self.btn_destroy = QPushButton(_("Quit"))
+        self.btn_destroy.setObjectName("navItem")
+        self.btn_destroy.setCursor(Qt.CursorShape.PointingHandCursor)
+        bind_icon(self.btn_destroy, "power", "destructive")
+        self.btn_destroy.setToolTip(_("Stop everything and close the application"))
+        self.btn_destroy.clicked.connect(lambda: self._destroy_cb())
+        col.addWidget(self.btn_destroy)
+        return bar
+
+    def _build_status_bar(self) -> QFrame:
+        bar = QFrame()
+        bar.setObjectName("statusBar")
+        bar.setFixedHeight(38)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(32, 0, 24, 0)
+        row.setSpacing(10)
+        self._status_label = QLabel(_("Ready"))
+        self._status_label.setObjectName("statusLabel")
+        row.addWidget(self._status_label, 1)
+        provider = "GPU · CUDA" if any("CUDA" in p for p in modules.globals.execution_providers) else (
+            "GPU · DirectML" if any("Dml" in p for p in modules.globals.execution_providers) else "CPU")
+        pill = QLabel(provider)
+        pill.setObjectName("pill")
+        row.addWidget(pill)
+        return bar
+
+    @staticmethod
+    def _scroll(page: QWidget) -> QScrollArea:
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        area.setWidget(page)
+        return area
+
+    @staticmethod
+    def _page(kicker: str, title: str, description: str) -> Tuple[QWidget, QVBoxLayout]:
+        page = QWidget()
+        page.setObjectName("page")
+        outer = QHBoxLayout(page)
+        outer.setContentsMargins(32, 30, 32, 32)
+        body_widget = QWidget()
+        body_widget.setObjectName("page")
+        body_widget.setMaximumWidth(920)
+        body = QVBoxLayout(body_widget)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(16)
+        head = QVBoxLayout()
+        head.setSpacing(4)
+        head.addWidget(eyebrow(kicker))
+        t = QLabel(title)
+        t.setObjectName("pageTitle")
+        head.addWidget(t)
+        d = QLabel(description)
+        d.setObjectName("pageDesc")
+        d.setWordWrap(True)
+        head.addWidget(d)
+        body.addLayout(head)
+        body.addSpacing(6)
+        outer.addWidget(body_widget, 1)
+        outer.addStretch(0)
+        return page, body
+
+    def _show_page(self, index: int) -> None:
+        self._stack.setCurrentIndex(index)
+        if index < len(self._nav_buttons):
+            self._nav_buttons[index].setChecked(True)
+        for i, btn in enumerate(self._nav_buttons):
+            bind_icon(btn, ["video", "image", "sliders-horizontal"][i],
+                      "primary" if i == index else "muted_fg")
+        slot = self._face_slots.get(index)
+        if slot is not None:
+            slot.insertWidget(0, self._face_card)
+
+    # ── theme ────────────────────────────────────────────────────────────
+
+    def _refresh_theme_button(self) -> None:
+        mode = getattr(modules.globals, "ui_theme", "system")
+        label = {"system": _("Theme: System"), "light": _("Theme: Light"), "dark": _("Theme: Dark")}[mode]
+        self.btn_theme.setText(label)
+        bind_icon(self.btn_theme, {"system": "monitor", "light": "sun", "dark": "moon"}[mode], "muted_fg")
+
+    def _on_cycle_theme(self) -> None:
+        modes = list(THEME_MODES)
+        cur = getattr(modules.globals, "ui_theme", "system")
+        modules.globals.ui_theme = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "system"
+        save_switch_states()
+        apply_theme(_APP, modules.globals.ui_theme)
+        self._refresh_theme_button()
+        self._show_page(self._stack.currentIndex())
 
     # ── helpers ──────────────────────────────────────────────────────────
 
-    def _make_switch(self, field: str, label: str, tip: str) -> "_Switch":
-        sw = _Switch(_(label), getattr(modules.globals, field), _(tip))
+    def _make_switch(self, field: str, label: str, tip: str, description: str = "") -> SwitchRow:
+        sw = SwitchRow(_(label), getattr(modules.globals, field), _(tip),
+                       _(description) if description else "")
         sw.toggled.connect(
             lambda v, f=field: (
                 setattr(modules.globals, f, v),
@@ -602,82 +648,41 @@ class MainWindow(QMainWindow):
         )
         return sw
 
-    @staticmethod
-    def _switch_grid(switches: list) -> QGridLayout:
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(16)
-        grid.setVerticalSpacing(2)
-        for i, w in enumerate(switches):
-            grid.addWidget(w, i // 2, i % 2)
-        return grid
-
-    # ── header ───────────────────────────────────────────────────────────
-
-    def _build_header(self) -> QVBoxLayout:
-        col = QVBoxLayout()
-        col.setSpacing(0)
-        title = QLabel(modules.metadata.name)
-        title.setObjectName("appTitle")
-        subtitle = QLabel(_("Real-time face swap for webcam, photos and videos"))
-        subtitle.setObjectName("appSubtitle")
-        col.addWidget(title)
-        col.addWidget(subtitle)
-        return col
-
-    # ── 1. face ──────────────────────────────────────────────────────────
+    # ── shared face card ─────────────────────────────────────────────────
 
     def _build_face_card(self) -> QFrame:
-        card, layout = _card(_("Your face"))
-        row = QHBoxLayout()
-        row.setSpacing(14)
-
+        card, layout = _card(_("Your face"), _("A clear, front-facing photo works best."))
+        card.setFixedWidth(276)
         self.source_label = _make_image_drop(_("No face\nselected"), (THUMB_SIZE, THUMB_SIZE))
-        row.addWidget(self.source_label)
-
-        col = QVBoxLayout()
-        col.setSpacing(8)
-        col.addWidget(_hint(_("Pick a clear, front-facing photo. This face is "
-                              "placed onto the webcam or target.")))
-        self.btn_select_source = QPushButton(_("Choose face photo…"))
-        self.btn_select_source.setToolTip(
-            _("Choose the source face image to swap onto the target")
-        )
+        layout.addWidget(self.source_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.btn_select_source = _button(_("Choose photo…"), "", "upload")
+        self.btn_select_source.setToolTip(_("Choose the source face image to swap onto the target"))
         self.btn_select_source.clicked.connect(self._on_select_source)
-        col.addWidget(self.btn_select_source)
-        self.btn_random_face = QPushButton(_("Random AI face"))
-        self.btn_random_face.setObjectName("secondary")
-        self.btn_random_face.setToolTip(
-            _("Get a random face from thispersondoesnotexist.com")
-        )
+        layout.addWidget(self.btn_select_source)
+        self.btn_random_face = _button(_("Random AI face"), "ghost", "sparkles", "muted_fg")
+        self.btn_random_face.setToolTip(_("Get a random face from thispersondoesnotexist.com"))
         self.btn_random_face.clicked.connect(self._on_random_face)
-        col.addWidget(self.btn_random_face)
-        col.addStretch(1)
-        row.addLayout(col, 1)
-        layout.addLayout(row)
+        layout.addWidget(self.btn_random_face)
+        layout.addStretch(1)
         return card
 
-    # ── 2. mode tabs ─────────────────────────────────────────────────────
+    def _with_face_slot(self, index: int, right: QWidget) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(16)
+        slot = QVBoxLayout()
+        slot.setContentsMargins(0, 0, 0, 0)
+        row.addLayout(slot)
+        row.addWidget(right, 1)
+        self._face_slots[index] = slot
+        return row
 
-    def _build_mode_tabs(self) -> QTabWidget:
-        tabs = QTabWidget()
-        tabs.setObjectName("modeTabs")
-        tabs.setDocumentMode(True)
-        tabs.addTab(self._build_live_tab(), _("Live webcam"))
-        tabs.addTab(self._build_file_tab(), _("Photo / Video"))
-        return tabs
+    # ── live page ────────────────────────────────────────────────────────
 
-    def _build_live_tab(self) -> QWidget:
-        page = QFrame()
-        page.setObjectName("tabPage")
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(16, 14, 16, 16)
-        layout.setSpacing(10)
+    def _build_live_page(self) -> QWidget:
+        page, body = self._page(_("Real-time"), _("Live webcam"),
+                                _("Swap your face on your webcam in real time and use it in video calls."))
 
-        # Camera selector
-        cam_row = QHBoxLayout()
-        cam_label = QLabel(_("Camera"))
-        cam_label.setObjectName("fieldLabel")
-        cam_row.addWidget(cam_label)
+        card, layout = _card(_("Webcam"), _("Choose a camera, then go live. The preview opens in its own window."))
         self._camera_indices, self._camera_names = get_available_cameras()
         self.cb_camera = QComboBox()
         if not self._camera_names or self._camera_names[0] == "No cameras found":
@@ -688,42 +693,39 @@ class MainWindow(QMainWindow):
             self.cb_camera.addItems(self._camera_names)
             cam_ok = True
         self.cb_camera.setToolTip(_("Select which camera to use for live mode"))
-        cam_row.addWidget(self.cb_camera, 1)
-        layout.addLayout(cam_row)
+        layout.addLayout(_field(_("Camera"), self.cb_camera))
+        layout.addWidget(_rule())
 
-        # Teams / Zoom output
         self.sw_virtual_cam = self._make_switch(
-            "virtual_camera", "Use in Teams / Zoom (virtual camera)",
-            "Send the live output to 'OBS Virtual Camera'. Needs OBS Studio "
-            "installed; keep OBS's own 'Start Virtual Camera' stopped.")
+            "virtual_camera", "Use in video calls",
+            "Send the live output to 'OBS Virtual Camera'. Needs OBS Studio installed; "
+            "keep OBS's own 'Start Virtual Camera' stopped.",
+            "Shows up as “OBS Virtual Camera” in Teams, Zoom or Meet.")
         layout.addWidget(self.sw_virtual_cam)
-        layout.addWidget(_hint(_("Then in Teams/Zoom choose the camera named "
-                                 "“OBS Virtual Camera”. Keep the Live window open.")))
-
         self.sw_live_mirror = self._make_switch(
-            "live_mirror", "Mirror", "Flip the live image horizontally")
-        self.sw_show_fps = self._make_switch(
-            "show_fps", "Show FPS", "Display frames-per-second counter on the live preview")
+            "live_mirror", "Mirror", "Flip the live image horizontally", "Flip the image like a mirror.")
+        layout.addWidget(self.sw_live_mirror)
         self.sw_color_fix = self._make_switch(
-            "color_correction", "Fix blueish camera", "Fix blue/green color cast from some webcams")
-        layout.addLayout(self._switch_grid(
-            [self.sw_live_mirror, self.sw_show_fps, self.sw_color_fix]))
+            "color_correction", "Fix blueish camera", "Fix blue/green color cast from some webcams",
+            "Corrects a blue or green colour cast.")
+        layout.addWidget(self.sw_color_fix)
+        self.sw_show_fps = self._make_switch(
+            "show_fps", "Show FPS", "Display frames-per-second counter on the live preview",
+            "Overlay the frame rate on the preview.")
+        layout.addWidget(self.sw_show_fps)
+        layout.addSpacing(4)
 
-        self.btn_live = QPushButton(_("▶  Go Live"))
-        self.btn_live.setObjectName("primaryLarge")
+        self.btn_live = _button(_("Go Live"), "primary", "play", "primary_fg", "lg")
         self.btn_live.setEnabled(cam_ok)
         self.btn_live.setToolTip(_("Start real-time face swap using webcam"))
         self.btn_live.clicked.connect(self._on_live)
         layout.addWidget(self.btn_live)
+        body.addLayout(self._with_face_slot(self.PAGE_LIVE, card))
 
-        # Advanced camera settings, hidden by default
-        adv = _Collapsible(_("Camera settings"))
-        grid = QGridLayout(adv.body)
-        grid.setContentsMargins(0, 4, 0, 0)
-        grid.setHorizontalSpacing(12)
+        adv, adv_layout = _card(_("Camera settings"), _("Applied the next time you go live."))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(8)
-
-        grid.addWidget(QLabel(_("Resolution")), 0, 0)
         self.cb_resolution = QComboBox()
         # 640x480 is native on virtually every webcam and the safest 30fps
         # mode on USB 2.0. Higher tiers are 16:9 and useful when the camera
@@ -741,14 +743,11 @@ class MainWindow(QMainWindow):
         self.cb_resolution.setCurrentIndex(idx)
         self.cb_resolution.currentIndexChanged.connect(self._on_resolution_change)
         self.cb_resolution.setToolTip(_(
-            "Requested webcam resolution. Camera may negotiate to its "
-            "nearest supported size. Applies on next Live start.\n\n"
-            "640x480 is the safest 30fps choice. HD/FHD can drop to "
-            "~10fps on USB 2.0 webcams."
+            "Requested webcam resolution. 640x480 is the safest 30fps choice; "
+            "HD/FHD can drop to ~10fps on USB 2.0 webcams."
         ))
-        grid.addWidget(self.cb_resolution, 0, 1)
+        grid.addLayout(_field(_("Resolution"), self.cb_resolution), 0, 0)
 
-        grid.addWidget(QLabel(_("Face detection")), 1, 0)
         self.cb_det_size = QComboBox()
         self._det_size_options = [160, 320, 640]
         for v in self._det_size_options:
@@ -762,85 +761,80 @@ class MainWindow(QMainWindow):
         self.cb_det_size.setCurrentIndex(self._det_size_options.index(cur_det))
         self.cb_det_size.currentIndexChanged.connect(self._on_det_size_change)
         self.cb_det_size.setToolTip(_(
-            "Face detection input resolution. Lower = faster, less accurate at "
-            "distance."
+            "Face detection input resolution. Lower = faster, less accurate at distance."
         ))
-        grid.addWidget(self.cb_det_size, 1, 1)
-        grid.setColumnStretch(1, 1)
-        layout.addWidget(adv)
+        grid.addLayout(_field(_("Face detection"), self.cb_det_size), 0, 1)
+        adv_layout.addLayout(grid)
+        body.addWidget(adv)
+        body.addStretch(1)
         return page
 
-    def _build_file_tab(self) -> QWidget:
-        page = QFrame()
-        page.setObjectName("tabPage")
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(16, 14, 16, 16)
-        layout.setSpacing(10)
+    # ── photo / video page ───────────────────────────────────────────────
 
-        row = QHBoxLayout()
-        row.setSpacing(14)
+    def _build_file_page(self) -> QWidget:
+        page, body = self._page(_("Files"), _("Photo & Video"),
+                                _("Put your face into a photo or video and save the result as a new file."))
+
+        card, layout = _card(_("Target"), _("The photo or video whose face will be replaced."))
+        inner = QHBoxLayout()
+        inner.setSpacing(16)
         self.target_label = _make_image_drop(_("No target\nselected"), (THUMB_SIZE, THUMB_SIZE))
-        row.addWidget(self.target_label)
-        col = QVBoxLayout()
-        col.setSpacing(8)
-        col.addWidget(_hint(_("Pick a photo or video. Your face will replace "
-                              "the face in it, and you save the result as a new file.")))
-        self.btn_select_target = QPushButton(_("Choose photo or video…"))
-        self.btn_select_target.setToolTip(
-            _("Choose the target image or video to apply face swap to")
-        )
+        inner.addWidget(self.target_label, 0, Qt.AlignmentFlag.AlignTop)
+        buttons = QVBoxLayout()
+        buttons.setSpacing(8)
+        self.btn_select_target = _button(_("Choose photo or video…"), "", "upload")
+        self.btn_select_target.setToolTip(_("Choose the target image or video to apply face swap to"))
         self.btn_select_target.clicked.connect(self._on_select_target)
-        col.addWidget(self.btn_select_target)
-        self.btn_swap = QPushButton(_("⇄  Swap face and target"))
-        self.btn_swap.setObjectName("secondary")
+        buttons.addWidget(self.btn_select_target)
+        self.btn_swap = _button(_("Swap face and target"), "ghost", "arrow-left-right", "muted_fg")
         self.btn_swap.setToolTip(_("Swap source and target images"))
         self.btn_swap.clicked.connect(self._on_swap_paths)
-        col.addWidget(self.btn_swap)
-        col.addStretch(1)
-        row.addLayout(col, 1)
-        layout.addLayout(row)
+        buttons.addWidget(self.btn_swap)
+        buttons.addStretch(1)
+        inner.addLayout(buttons, 1)
+        layout.addLayout(inner)
+        layout.addStretch(1)
+        body.addLayout(self._with_face_slot(self.PAGE_FILE, card))
 
-        video_label = QLabel(_("Video output"))
-        video_label.setObjectName("fieldLabel")
-        layout.addWidget(video_label)
+        out, out_layout = _card(_("Output"), _("Video options are ignored for photos."))
         self.sw_keep_fps = self._make_switch(
-            "keep_fps", "Keep original fps", "Output video keeps the original frame rate")
+            "keep_fps", "Keep original frame rate", "Output video keeps the original frame rate")
         self.sw_keep_audio = self._make_switch(
             "keep_audio", "Keep audio", "Copy audio track from the source video to output")
         self.sw_keep_frames = self._make_switch(
-            "keep_frames", "Keep temp frames", "Keep extracted frames on disk after processing")
-        layout.addLayout(self._switch_grid(
-            [self.sw_keep_fps, self.sw_keep_audio, self.sw_keep_frames]))
-
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(10)
-        self.btn_preview = QPushButton(_("Preview"))
-        self.btn_preview.setObjectName("secondary")
+            "keep_frames", "Keep temporary frames", "Keep extracted frames on disk after processing")
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(32)
+        grid.setVerticalSpacing(4)
+        grid.addWidget(self.sw_keep_fps, 0, 0)
+        grid.addWidget(self.sw_keep_audio, 0, 1)
+        grid.addWidget(self.sw_keep_frames, 1, 0)
+        out_layout.addLayout(grid)
+        out_layout.addWidget(_rule())
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        actions.addStretch(1)
+        self.btn_preview = _button(_("Preview"), "", "eye")
         self.btn_preview.setToolTip(_("Show/hide a preview of the processed output"))
         self.btn_preview.clicked.connect(self._on_toggle_preview)
-        self.btn_start = QPushButton(_("Convert && Save…"))
-        self.btn_start.setObjectName("primaryLarge")
+        self.btn_start = _button(_("Convert && save…"), "primary", "save", "primary_fg")
         self.btn_start.setToolTip(_("Process the target with your face and save the result"))
         self.btn_start.clicked.connect(self._on_start)
-        btn_row.addWidget(self.btn_preview, 1)
-        btn_row.addWidget(self.btn_start, 2)
-        layout.addLayout(btn_row)
+        actions.addWidget(self.btn_preview)
+        actions.addWidget(self.btn_start)
+        out_layout.addLayout(actions)
+        body.addWidget(out)
+        body.addStretch(1)
         return page
 
-    # ── 3. quality ───────────────────────────────────────────────────────
+    # ── quality page ─────────────────────────────────────────────────────
 
-    def _build_quality_card(self) -> QFrame:
-        card, layout = _card()
-        section = _Collapsible(_("Face quality and advanced"))
-        layout.addWidget(section)
-        body = QVBoxLayout(section.body)
-        body.setContentsMargins(0, 6, 0, 0)
-        body.setSpacing(10)
+    def _build_quality_page(self) -> QWidget:
+        page, body = self._page(_("Tuning"), _("Face quality"),
+                                _("Fine-tune how the swapped face looks. Changes apply instantly, even while live."))
 
-        enh_row = QHBoxLayout()
-        enh_label = QLabel(_("Face enhancer"))
-        enh_label.setObjectName("fieldLabel")
-        enh_row.addWidget(enh_label)
+        enh, enh_layout = _card(_("Enhancer"),
+                                _("Sharper, more detailed faces. Lowers live FPS on smaller GPUs."))
         self.cb_enhancer = QComboBox()
         self.cb_enhancer.addItems(["None", "GFPGAN", "GPEN-512", "GPEN-256"])
         initial = "None"
@@ -852,24 +846,26 @@ class MainWindow(QMainWindow):
             initial = "GPEN-256"
         self.cb_enhancer.setCurrentText(initial)
         self.cb_enhancer.currentTextChanged.connect(self._on_enhancer_change)
-        self.cb_enhancer.setToolTip(_(
-            "Sharper, more detailed face. Slower: lowers live FPS noticeably."))
-        enh_row.addWidget(self.cb_enhancer, 1)
-        body.addLayout(enh_row)
+        self.cb_enhancer.setToolTip(_("Select a face enhancement model (None = no enhancement)"))
+        enh_layout.addLayout(_field(_("Model"), self.cb_enhancer))
+        body.addWidget(enh)
 
+        blend, blend_layout = _card(_("Blending"), _("Control how strongly the new face is applied."))
         grid = QGridLayout()
-        grid.setHorizontalSpacing(12)
+        grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(14)
 
         def slider(row, name, tip, min_v, max_v, default, denom, on_change, fmt):
-            grid.addWidget(QLabel(_(name)), row, 0)
+            lab = QLabel(_(name))
+            lab.setMinimumWidth(110)
+            grid.addWidget(lab, row, 0)
             s = QSlider(Qt.Orientation.Horizontal)
             s.setRange(int(min_v * denom), int(max_v * denom))
             s.setValue(int(default * denom))
             s.setToolTip(_(tip))
             value_label = QLabel(fmt(default))
             value_label.setObjectName("sliderValue")
-            value_label.setMinimumWidth(42)
+            value_label.setMinimumWidth(40)
             value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
             def changed(iv):
@@ -897,19 +893,28 @@ class MainWindow(QMainWindow):
             2, "Sharpness", "Sharpen the enhanced face output",
             0.0, 5.0, 0.0, 10, self._on_sharpness_change, lambda v: f"{v:.1f}")
         grid.setColumnStretch(1, 1)
-        body.addLayout(grid)
+        blend_layout.addLayout(grid)
+        body.addWidget(blend)
 
+        faces, faces_layout = _card(_("Faces"), _("Choose which faces get swapped."))
         self.sw_many_faces = self._make_switch(
-            "many_faces", "Swap all faces", "Swap every detected face, not just the primary one")
+            "many_faces", "Swap all faces", "Swap every detected face, not just the primary one",
+            "Replace every face in view, not just the main one.")
         self.sw_poisson = self._make_switch(
-            "poisson_blend", "Smooth edges", "Blend face edges smoothly using Poisson blending")
+            "poisson_blend", "Smooth edges", "Blend face edges smoothly using Poisson blending",
+            "Seamless blending around the face edge. Slower.")
         # Map faces is special — closes mapper when toggled off.
-        self.sw_map_faces = _Switch(_("Map faces"), modules.globals.map_faces,
-                                    _("Manually assign which source face maps to which target face"))
+        self.sw_map_faces = SwitchRow(
+            _("Map faces"), modules.globals.map_faces,
+            _("Manually assign which source face maps to which target face"),
+            _("Pick a different source face for each person."))
         self.sw_map_faces.toggled.connect(self._on_map_faces_toggled)
-        body.addLayout(self._switch_grid(
-            [self.sw_many_faces, self.sw_poisson, self.sw_map_faces]))
-        return card
+        faces_layout.addWidget(self.sw_many_faces)
+        faces_layout.addWidget(self.sw_poisson)
+        faces_layout.addWidget(self.sw_map_faces)
+        body.addWidget(faces)
+        body.addStretch(1)
+        return page
 
     def _on_resolution_change(self, idx: int) -> None:
         if 0 <= idx < len(self._resolution_options):
@@ -1838,6 +1843,11 @@ class _Window:
         self._app.exec()
 
 
+def _on_system_theme_changed(*_args) -> None:
+    if getattr(modules.globals, "ui_theme", "system") == "system" and _APP is not None:
+        apply_theme(_APP, "system")
+
+
 def init(
     start: Callable[[], None], destroy: Callable[[], None], lang: str
 ) -> _Window:
@@ -1848,7 +1858,11 @@ def init(
         _APP = QApplication(sys.argv)
     else:
         _APP = QApplication.instance()
-    _APP.setStyleSheet(QSS)
+    apply_theme(_APP, getattr(modules.globals, "ui_theme", "system"))
+    try:
+        _APP.styleHints().colorSchemeChanged.connect(_on_system_theme_changed)
+    except Exception:
+        pass
 
     _BRIDGE = _UIBridge()
     def _destroy_with_cleanup(*args, **kwargs):

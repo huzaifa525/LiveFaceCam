@@ -23,13 +23,16 @@
 |---|---|---|
 | Virtual camera for video calls | Use OBS window capture | **Built in: one toggle** |
 | Windows setup | Manual CUDA / cuDNN install | **`Setup.bat` does everything** (CUDA libs via pip) |
-| Interface | Single cluttered panel | **Clean tabs: Live webcam / Photo & Video** |
+| Interface | Single cluttered panel | **Modern sidebar app, light & dark themes** |
 | Close-up source photos | Often "no face found" | **Detected automatically** |
 | Slow or busy camera | UI freezes ~40 s | **Opens in ~2 s, with a clear warning** |
 | Long GPU videos | VRAM leak can crash | **Fixed** |
 | AMD (DirectML) | Can crash on face analysis | **Fixed** |
 
-<p align="center"><img src="media/livefacecam-ui.png" alt="LiveFaceCam clean UI: live webcam face swap with virtual camera toggle" width="420"></p>
+<p align="center">
+  <img src="media/livefacecam-ui.png" alt="LiveFaceCam live webcam face swap UI (light theme) with virtual camera toggle" width="49%">
+  <img src="media/livefacecam-ui-dark.png" alt="LiveFaceCam face quality settings (dark theme)" width="49%">
+</p>
 
 ## 🚀 Quick start (Windows)
 
