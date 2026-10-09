@@ -44,6 +44,7 @@ live_resizable: bool = True
 camera_input_combobox: Any | None = None # Placeholder for UI element if needed
 webcam_preview_running: bool = False
 show_fps: bool = False
+virtual_camera: bool = False  # Send live output to OBS Virtual Camera (Teams/Zoom)
 
 # System Configuration
 max_memory: int | None = None        # Memory limit in GB? (Needs clarification)

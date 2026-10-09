@@ -127,7 +127,7 @@ def process_video_in_memory(source_path: str, target_path: str, fps: float) -> b
     disk-based pipeline).
     """
     from modules import imread_unicode
-    from modules.face_analyser import get_one_face
+    from modules.face_analyser import get_source_face
     from modules.utilities import (
         get_video_dimensions,
         estimate_frame_count,
@@ -141,7 +141,7 @@ def process_video_in_memory(source_path: str, target_path: str, fps: float) -> b
     if source_path and os.path.exists(source_path):
         source_img = imread_unicode(source_path)
         if source_img is not None:
-            source_face = get_one_face(source_img)
+            source_face = get_source_face(source_img)
             del source_img
         if source_face is None:
             print("[DLC.CORE] Warning: No face detected in source image. "

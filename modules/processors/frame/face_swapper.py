@@ -9,7 +9,7 @@ import modules.globals
 import modules.processors.frame.core
 from modules import imread_unicode, imwrite_unicode
 from modules.core import update_status
-from modules.face_analyser import get_one_face, get_many_faces, default_source_face
+from modules.face_analyser import get_one_face, get_source_face, get_many_faces, default_source_face
 from modules.typing import Face, Frame
 from modules.utilities import (
     is_image,
@@ -303,6 +303,7 @@ def get_face_swapper() -> Any:
 
 
 _HAS_TORCH_CUDA = False
+_PASTE_BACK_CALLS = 0
 try:
     import torch
     if torch.cuda.is_available():
@@ -498,6 +499,13 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
         tgt_t = torch.from_numpy(target_crop).float().cuda()
         blended = (mask_t * fake_t + (1.0 - mask_t) * tgt_t).to(torch.uint8).cpu().numpy()
         target_img[y1p:y2p, x1p:x2p] = blended
+        # Free GPU tensors now instead of waiting for GC; ONNX Runtime shares
+        # this device and long videos otherwise exhaust VRAM (upstream #1868).
+        del mask_t, fake_t, tgt_t, blended
+        global _PASTE_BACK_CALLS
+        _PASTE_BACK_CALLS += 1
+        if _PASTE_BACK_CALLS % 100 == 0:
+            torch.cuda.empty_cache()
     else:
         # Fused uint8 blend via cv2 SIMD — no float32 round-trip.
         # Measured ~7-8× faster than the old numpy float32 path on a 1000×1000 crop.
@@ -934,7 +942,7 @@ def process_frames(
                     # Specific error for file reading failure
                     update_status(f"Error reading source image file {source_path}. Please check the path and file integrity.", NAME)
                 else:
-                    source_face = get_one_face(source_img)
+                    source_face = get_source_face(source_img)
                     if source_face is None:
                         # Specific message for no face detected after successful read
                         update_status(f"Warning: Successfully read source image {source_path}, but no face was detected. Swaps will be skipped.", NAME)
@@ -1060,7 +1068,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
                 if source_img is None:
                     update_status(f"Error: Could not read source image: {source_path}", NAME)
                     return
-                source_face = get_one_face(source_img)
+                source_face = get_source_face(source_img)
                 if not source_face:
                     update_status(f"Error: No face found in source image: {source_path}", NAME)
                     return

@@ -1,6 +1,7 @@
 import os
 import shutil
 from typing import Any
+import cv2
 import insightface
 import threading
 
@@ -45,13 +46,10 @@ def get_face_analyser() -> Any:
         with FACE_ANALYSER_LOCK:
             # Double-check after acquiring lock
             if FACE_ANALYSER is None:
-                from modules.processors.frame._onnx_enhancer import (
-                    build_provider_config,
-                )
                 from modules.model_downloader import ensure_insightface_pack
 
                 ensure_insightface_pack('buffalo_l')
-                providers = build_provider_config()
+                providers = build_face_analyser_provider_config()
                 analyser = insightface.app.FaceAnalysis(
                     name='buffalo_l',
                     providers=providers,
@@ -67,6 +65,24 @@ def get_face_analyser() -> Any:
             else:
                 analyser = FACE_ANALYSER
     return analyser
+
+
+def build_face_analyser_provider_config():
+    """Build provider config for InsightFace analysis models.
+
+    DirectML can still be used by the swapper/enhancer pipeline, but running
+    InsightFace detection/recognition on DirectML at the same time has been
+    reported to crash on AMD systems. Keep analysis on CPU for DirectML runs
+    while preserving the existing provider configuration for all other modes.
+    """
+    if _is_dml():
+        return ["CPUExecutionProvider"]
+
+    from modules.processors.frame._onnx_enhancer import (
+        build_provider_config,
+    )
+
+    return build_provider_config()
 
 
 def _optimize_det_model(fa: Any, providers, det_size: tuple) -> None:
@@ -174,19 +190,54 @@ def get_one_face(frame: Frame, faces: Any = None) -> Any:
                 faces = _analyse_faces(frame)
         else:
             faces = _analyse_faces(frame)
-    try:
-        return min(faces, key=lambda x: x.bbox[0])
-    except ValueError:
+
+    if faces is None:
         return None
+
+    # Some callers may pass a sequence containing None entries, or a numpy-like
+    # collection that is empty after filtering. Treat those as no face found.
+    valid_faces = [face for face in faces if face is not None and getattr(face, "bbox", None) is not None]
+    if not valid_faces:
+        return None
+
+    try:
+        return min(valid_faces, key=lambda x: x.bbox[0])
+    except (TypeError, ValueError):
+        return None
+
+
+def get_source_face(frame: Frame) -> Any:
+    """get_one_face for the source photo, tolerant of tight crops.
+
+    The detector misses faces that fill the whole image (e.g. close-up
+    portraits). If nothing is found, retry with a border so the face is a
+    detectable size. Only the embedding is used from the source face, so the
+    shifted coordinates don't matter.
+    """
+    face = get_one_face(frame)
+    if face is not None or frame is None:
+        return face
+    for pad_ratio in (0.25, 0.5):
+        pad = int(max(frame.shape[:2]) * pad_ratio)
+        padded = cv2.copyMakeBorder(
+            frame, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(0, 0, 0)
+        )
+        face = get_one_face(padded)
+        if face is not None:
+            return face
+    return None
 
 
 def get_many_faces(frame: Frame) -> Any:
     try:
         if _is_dml():
             with modules.globals.dml_lock:
-                return _analyse_faces(frame)
+                faces = _analyse_faces(frame)
         else:
-            return _analyse_faces(frame)
+            faces = _analyse_faces(frame)
+        if not faces:
+            return None
+        return faces
     except IndexError:
         return None
 

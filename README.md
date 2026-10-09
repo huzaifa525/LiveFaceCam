@@ -1,18 +1,64 @@
-<h1 align="center">Deep-Live-Cam 2.1.6</h1>
+<h1 align="center">LiveFaceCam: Real-Time AI Face Swap for Webcam & Video Calls</h1>
 
 <p align="center">
-  Real-time face swap and video deepfake with a single click and only a single image.
+  <b>Free, open-source real-time face swap for your webcam, plus one-click photo &amp; video face swap from a single image.</b><br>
+  Built-in virtual camera for video calls · clean modern UI · one-click Windows setup with NVIDIA CUDA.
 </p>
 
 <p align="center">
-<a href="https://trendshift.io/repositories/11395" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11395" alt="hacksider%2FDeep-Live-Cam | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+  <a href="https://github.com/huzaifa525/LiveFaceCam/releases/latest"><img src="https://img.shields.io/badge/Download-Windows-6d5dfc?style=for-the-badge&logo=windows" alt="Download for Windows"></a>
+  <a href="https://github.com/huzaifa525/LiveFaceCam/stargazers"><img src="https://img.shields.io/github/stars/huzaifa525/LiveFaceCam?style=for-the-badge&color=6d5dfc" alt="GitHub stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-6d5dfc?style=for-the-badge" alt="AGPL-3.0 license"></a>
 </p>
 
 <p align="center">
-  <img src="media/demo.gif" alt="Demo GIF" width="800">
+  <img src="media/demo.gif" alt="LiveFaceCam real-time AI face swap demo" width="800">
 </p>
 
-##  Disclaimer
+**LiveFaceCam** is a free, open-source **real-time AI face swap** app. Pick one photo and it swaps that face onto your **webcam** live, or onto any **photo or video** file. A built-in **virtual camera** lets you use the result in any app that accepts a webcam, such as video-call and streaming software. It runs locally on your PC (no cloud, no account) and is accelerated on **NVIDIA GPUs with CUDA**. LiveFaceCam is a fork of [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam).
+
+## ✨ What's new in LiveFaceCam
+
+| | Deep-Live-Cam | **LiveFaceCam** |
+|---|---|---|
+| Virtual camera for video calls | Use OBS window capture | **Built in: one toggle** |
+| Windows setup | Manual CUDA / cuDNN install | **`Setup.bat` does everything** (CUDA libs via pip) |
+| Interface | Single cluttered panel | **Clean tabs: Live webcam / Photo & Video** |
+| Close-up source photos | Often "no face found" | **Detected automatically** |
+| Slow or busy camera | UI freezes ~40 s | **Opens in ~2 s, with a clear warning** |
+| Long GPU videos | VRAM leak can crash | **Fixed** |
+| AMD (DirectML) | Can crash on face analysis | **Fixed** |
+
+<p align="center"><img src="media/livefacecam-ui.png" alt="LiveFaceCam clean UI: live webcam face swap with virtual camera toggle" width="420"></p>
+
+## 🚀 Quick start (Windows)
+
+1. **[Download the latest release](https://github.com/huzaifa525/LiveFaceCam/releases/latest)** and unzip it (or `git clone` this repo).
+2. Double-click **`Setup.bat`**. It installs everything and downloads the models (first run: 5–15 minutes).
+3. Double-click **`Start-LiveFaceCam.bat`**, choose a face photo, and press **▶ Go Live**.
+
+**Requirements:** Windows 10/11, [Python 3.11–3.14](https://www.python.org/downloads/), ~6 GB disk. An NVIDIA GPU is recommended (it also runs on CPU, slowly). For Photo/Video conversion install ffmpeg: `winget install Gyan.FFmpeg`.
+
+## 🎥 Use it as a webcam in video calls
+
+1. Install [OBS Studio](https://obsproject.com/) once. LiveFaceCam uses its virtual-camera driver; OBS itself doesn't need to be open.
+2. In LiveFaceCam, turn on **Use in Teams / Zoom (virtual camera)** and press **▶ Go Live**.
+3. In your video-call app, choose the camera named **OBS Virtual Camera**.
+
+> Keep OBS's own "Start Virtual Camera" button off; only one app can drive it at a time.
+
+## 🧑‍🎨 Features
+
+- **Real-time face swap** on any webcam, from a single photo
+- **Photo & video face swap**: convert files and save the result
+- **Virtual camera** output for video calls and streaming
+- **Mouth mask**: keep your real mouth for natural lip-sync
+- **Face enhancers**: GFPGAN, GPEN-256, GPEN-512
+- **Swap all faces** or **map faces** to different people
+- Runs **100% locally**: NVIDIA CUDA, AMD DirectML, Intel OpenVINO, Apple CoreML, or CPU
+
+
+## ⚖️ Responsible use
 
 This deepfake software is designed to be a productive tool for the AI-generated media industry. It can assist artists in animating custom characters, creating engaging content, and even using models for clothing design.
 
@@ -30,107 +76,9 @@ By using this software, you agree to these terms and commit to using it in a man
 
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
-## Pre-built Deep-Live-Cam 2.7.5 Ultimate!
-
-<p align="center">
-  <a href="https://deeplivecam.net/index.php/quickstart">
-    <img src="https://github.com/user-attachments/assets/fa2cdf79-c933-4b93-844a-b087192261ed" width="100%" alt="Lite / Ultimate Download Banner">
-  </a>
-</p>
-
-<p align="center">
-<a href="https://deeplivecam.net/index.php/plans/nvidia-gpu?plan_id=0&group_id=1">
-  <img src="https://github.com/user-attachments/assets/56b61811-3a1e-4672-9b50-cf7f6e8e6852" width="40" alt="Windows">
-</a>
-  &nbsp;&nbsp;&nbsp;
-<a href="https://deeplivecam.net/index.php/plans/nvidia-gpu?plan_id=0&group_id=2">
-  <img src="https://github.com/user-attachments/assets/6538e3a6-c957-431a-b586-2d6abcf534dc" width="34" alt="Mac Silicon">
-</a>
-  &nbsp;&nbsp;&nbsp;
-<a href="https://deeplivecam.net/index.php/plans/nvidia-gpu?plan_id=0&group_id=3">
-  <img src="https://github.com/user-attachments/assets/ad45142e-426c-4364-a2a9-a512670cc62c" width="40" alt="CPU">
-</a>
-</p>
-
-<p align="center">
-  <strong>Windows • Mac Silicon • CPU • NVIDIA • AMD</strong>
-</p>
-
-<p align="center">
-  Builds optimized for your hardware.
-</p>
-
-<p align="center">
-  <a href="https://deeplivecam.net/index.php/quickstart">
-    <img src="media/Download.png" width="280" alt="Download">
-  </a>
-</p>
-
-> **Ultimate** includes **30+ exclusive features**, performance optimizations, and **priority support** We only have a single official website which is https://deeplivecam.net . Please be careful on where you download other versions of this application aside from that website and this github repo.
-
-Perfect if you want the fastest setup with **zero manual installation**, pre-configured dependencies, and optimized builds for every supported platform.
-
-## TLDR; Live Deepfake in just 3 Clicks
-![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
-1. Select a face
-2. Select which camera to use
-3. Press live!
-
-## Features & Uses - Everything is in real-time
-
-### Mouth Mask
-
-**Retain your original mouth for accurate movement using Mouth Mask**
-
-<p align="center">
-  <img src="media/ludwig.gif" alt="resizable-gif">
-</p>
-
-### Face Mapping
-
-**Use different faces on multiple subjects simultaneously**
-
-<p align="center">
-  <img src="media/streamers.gif" alt="face_mapping_source">
-</p>
-
-### Your Movie, Your Face
-
-**Watch movies with any face in real-time**
-
-<p align="center">
-  <img src="media/movie.gif" alt="movie">
-</p>
-
-### Live Show
-
-**Run Live shows and performances**
-
-<p align="center">
-  <img src="media/live_show.gif" alt="show">
-</p>
-
-### Memes
-
-**Create Your Most Viral Meme Yet**
-
-<p align="center">
-  <img src="media/meme.gif" alt="show" width="450"> 
-  <br>
-  <sub>Created using Many Faces feature in Deep-Live-Cam</sub>
-</p>
-
-### Omegle
-
-**Surprise people on Omegle**
-
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/2e9b9b82-fa04-4b70-9f56-b1f68e7672d0" width="450" controls></video>
-</p>
-
 ## Installation (Manual)
 
-**Please be aware that the installation requires technical skills and is not for beginners. Consider downloading the quickstart version.**
+**Windows + NVIDIA users: skip this and use the [one-click setup](#-quick-start-windows) above.**
 
 <details>
 <summary>Click to see the process</summary>
@@ -150,8 +98,8 @@ This is more likely to work on your computer but will be slower as it utilizes t
 **2. Clone the Repository**
 
 ```bash
-git clone --depth 1 https://github.com/hacksider/Deep-Live-Cam.git
-cd Deep-Live-Cam
+git clone --depth 1 https://github.com/huzaifa525/LiveFaceCam.git
+cd LiveFaceCam
 ```
 
 **3. Download the Models**
@@ -218,7 +166,7 @@ pip uninstall gfpgan -y
 pip install git+https://github.com/TencentARC/GFPGAN.git@master
 ```
 
-**Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
+**Run:** If you don't have a GPU, you can run LiveFaceCam using `python run.py`. Note that initial execution will download models (~300MB).
 
 ### GPU Acceleration
 
@@ -344,21 +292,15 @@ python run.py --execution-provider openvino
 
 ## Usage
 
-**1. Image/Video Mode**
+**Live webcam**
+1. Choose a face photo (clear, front-facing).
+2. Open the **Live webcam** tab, pick your camera, press **▶ Go Live**.
+3. Optional: enable **Use in Teams / Zoom** to send the result to the virtual camera.
 
--   Execute `python run.py`.
--   Choose a source face image and a target image/video.
--   Click "Start".
--   The output will be saved in a directory named after the target video.
-
-**2. Webcam Mode**
-
--   Execute `python run.py`.
--   Select a source face image.
--   Click "Live".
--   Wait for the preview to appear (10-30 seconds).
--   Use a screen capture tool like OBS to stream.
--   To change the face, select a new source image.
+**Photo / Video**
+1. Choose a face photo.
+2. Open the **Photo / Video** tab and choose a target photo or video.
+3. Click **Preview** to check, then **Convert & Save…**.
 
 ## Download all models in this huggingface link
 - [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
@@ -390,21 +332,9 @@ options:
 
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
-## Press
-
- - [**Ars Technica**](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - *"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*
- - [**Yahoo!**](https://www.yahoo.com/tech/ok-viral-ai-live-stream-080041056.html) - *"OK, this viral AI live stream software is truly terrifying"*
- - [**CNN Brasil**](https://www.cnnbrasil.com.br/tecnologia/ia-consegue-clonar-rostos-na-webcam-entenda-funcionamento/) - *"AI can clone faces on webcam; understand how it works"*
- - [**Bloomberg Technoz**](https://www.bloombergtechnoz.com/detail-news/71032/kenalan-dengan-teknologi-deep-live-cam-bisa-jadi-alat-menipu) - *"Get to know Deep Live Cam technology, it can be used as a tool for deception."*
- - [**TrendMicro**](https://www.trendmicro.com/vinfo/gb/security/news/cyber-attacks/ai-vs-ai-deepfakes-and-ekyc) - *"AI vs AI: DeepFakes and eKYC"*
- - [**PetaPixel**](https://petapixel.com/2024/08/14/deep-live-cam-deepfake-ai-tool-lets-you-become-anyone-in-a-video-call-with-single-photo-mark-zuckerberg-jd-vance-elon-musk/) - *"Deepfake AI Tool Lets You Become Anyone in a Video Call With Single Photo"*
- - [**SomeOrdinaryGamers**](https://www.youtube.com/watch?time_continue=1074&v=py4Tc-Y8BcY) - *"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"*
- - [**IShowSpeed**](https://www.youtube.com/live/mFsCe7AIxq8?feature=shared&t=2686) - *"Alright look look look, now look chat, we can do any face we want to look like chat"*
- - [**TechLinked (Linus Tech Tips)**](https://www.youtube.com/watch?v=wnCghLjqv3s&t=551s) - *"They do a pretty good job matching poses, expression and even the lighting"*
- - [**IShowSpeed**](https://youtu.be/JbUPRmXRUtE?t=3964) - *"What the F***! Why do I look like Vinny Jr? I look exactly like Vinny Jr!? No, this shit is crazy! Bro This is F*** Crazy!"*
-
-
 ## Credits
+
+-   **LiveFaceCam is a fork of [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam) by [hacksider](https://github.com/hacksider) and contributors.** All core face-swap technology comes from that project.
 
 -   [ffmpeg](https://ffmpeg.org/): for making video-related operations easy
 -   [Henry](https://github.com/henryruhs): One of the major contributor in this repo
@@ -421,18 +351,15 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 -   Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
 -   All the wonderful users who helped make this project go viral by starring the repo ❤️
 
-[![Stargazers](https://reporoster.com/stars/hacksider/Deep-Live-Cam)](https://github.com/hacksider/Deep-Live-Cam/stargazers)
+## License
 
-## Contributions
+LiveFaceCam is licensed under **AGPL-3.0**, like the original project. The face-swap model (insightface `inswapper_128`) is licensed for **non-commercial research use only**, so LiveFaceCam is and will remain a free, non-commercial tool.
 
-![Alt](https://repobeats.axiom.co/api/embed/fec8e29c45dfdb9c5916f3a7830e1249308d20e1.svg "Repobeats analytics image")
+## Star history
 
-## Stars to the Moon 🚀
-
-<a href="https://star-history.com/#hacksider/deep-live-cam&Date">
+<a href="https://star-history.com/#huzaifa525/LiveFaceCam&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=huzaifa525/LiveFaceCam&type=Date&theme=dark" />
+   <img alt="LiveFaceCam star history" src="https://api.star-history.com/svg?repos=huzaifa525/LiveFaceCam&type=Date" />
  </picture>
 </a>

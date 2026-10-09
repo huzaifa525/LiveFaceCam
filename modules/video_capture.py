@@ -140,18 +140,29 @@ class VideoCapturer:
         DirectShow.  Takes ~0.5-1s at startup but gives a ground-truth
         number for adaptive polling/detection intervals.
         """
+        # Time-boxed: this runs on the GUI thread, and a stalled camera
+        # (e.g. held by NVIDIA Broadcast/Teams, ~1fps) would otherwise freeze
+        # the UI for warmup+sample seconds.
+        max_seconds = 1.5
         try:
+            deadline = time.perf_counter() + max_seconds
             for _ in range(warmup):
                 self.cap.read()
+                if time.perf_counter() > deadline:
+                    break
             t0 = time.perf_counter()
+            frames = 0
             for _ in range(sample):
                 ret, _ = self.cap.read()
                 if not ret:
                     return fallback
+                frames += 1
+                if time.perf_counter() - t0 > max_seconds:
+                    break
             elapsed = time.perf_counter() - t0
             if elapsed <= 0:
                 return fallback
-            return sample / elapsed
+            return frames / elapsed
         except Exception:
             return fallback
 

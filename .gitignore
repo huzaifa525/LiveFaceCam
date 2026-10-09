@@ -29,3 +29,12 @@ switch_states.json
 install.bat
 /.claude
 *.bat
+
+# LiveFaceCam local state
+.insightface/
+logs/
+*.err.log
+!Setup.bat
+!Start-LiveFaceCam.bat
+!run-cuda.bat
+!run-directml.bat
