@@ -46,7 +46,7 @@ Status: ✅ done · 🚧 in progress · ⬜ to do
 
 | # | Feature | Source | Why | Effort | Status |
 |---|---|---|---|---|---|
-| F1 | **Expression & mouth restoration**: blend the real mouth and eyes back in for natural talking and blinking. | Codex (Rope-Live, VisoMaster) | Lip-sync and expression in calls | L | ✅ |
+| F1 | **Expression & mouth restoration**: blend the real mouth and eyes back in for natural talking and blinking. | Codex (Rope-Live, VisoMaster) | Lip-sync and expression in calls | L | ⬜ reverted |
 | F2 | **Enhance-only mode** (enhance a face without swapping). | Upstream issue #1867 | Top community request | S | ⬜ |
 | F3 | **CodeFormer enhancer** with fidelity slider (`weight` input is float64). | Model research + Codex | Better photo/video restoration | M | ⬜ |
 | F4 | **OBS-missing detector** with install link for the virtual camera. | Issues review | Fewer "camera doesn't work" reports | S | ⬜ |
@@ -68,7 +68,7 @@ Status: ✅ done · 🚧 in progress · ⬜ to do
 - v1.2.0: HyperSwap 256 default, lazy TensorFlow (−1.7 s, −130 MB RAM), lean CUDA memory (−28% VRAM), ~13 → ~19 fps.
 - v1.2.1: live skips detail boost and Poisson blending (5 → 21 fps with heavy settings), face coverage and edge softness for jaw/beard.
 
-- Next release: expression restoration (Real mouth / Real eyes sliders in Face quality, about 10 ms per frame).
+- Reverted: expression restoration (Real mouth / Real eyes). In live use the swap looked gone whenever the expression changed, because the real mouth and eyes showed through. Needs a different approach before retrying (e.g. restore inner mouth only, lower default strength, or FaceFusion-style expression restorer).
 
 ## 6. Licences to respect
 Our code is AGPL-3.0. Model weights carry their own terms: HyperSwap (ResearchRAIL-MS, research only), InSwapper / ArcFace / AlphaFace / GPEN (non-commercial), CodeFormer (S-Lab, non-commercial), GFPGAN (Apache-2.0), XSeg (GPL-3.0), BiSeNet / 2DFAN4 (MIT). LiveFaceCam stays free and non-commercial.

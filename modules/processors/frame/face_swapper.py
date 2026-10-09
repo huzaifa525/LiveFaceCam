@@ -232,55 +232,6 @@ def reset_face_swapper() -> None:
         FACE_SWAPPER = None
 
 
-
-def _restore_expression(swapped: Frame, original: Frame, target_face: Face,
-                        mouth: float, eyes: float) -> Frame:
-    """Blend the person's real mouth and eyes back over the swapped face.
-
-    The swap models redraw the mouth and eyes from a single aligned crop, so
-    speech, teeth and blinks come out muted or late. Copying those regions
-    from the original frame, through soft hull masks built from the 106-point
-    landmarks, keeps the real movement while the rest of the face stays
-    swapped. Strength 0..1 sets how much of the real region shows through.
-    """
-    lm = getattr(target_face, "landmark_2d_106", None)
-    if lm is None or lm.shape[0] < 106:
-        return swapped
-    regions = []
-    if mouth > 0:
-        regions.append((lm[52:72], mouth, 0.18))
-    if eyes > 0:
-        regions.append((lm[33:43], eyes, 0.55))
-        regions.append((lm[87:97], eyes, 0.55))
-    if not regions:
-        return swapped
-
-    h, w = swapped.shape[:2]
-    face_w = float(np.ptp(lm[:, 0])) or 1.0
-    pad = int(face_w * 0.15) + 4
-    pts_all = np.concatenate([r[0] for r in regions])
-    x1, y1 = np.maximum(pts_all.min(axis=0).astype(int) - pad, 0)
-    x2, y2 = np.minimum(pts_all.max(axis=0).astype(int) + pad, [w, h])
-    if x2 <= x1 or y2 <= y1:
-        return swapped
-
-    mask = np.zeros((y2 - y1, x2 - x1), dtype=np.float32)
-    for pts, strength, grow in regions:
-        centre = pts.mean(axis=0)
-        grown = (pts - centre) * (1.0 + grow) + centre - (x1, y1)
-        hull = cv2.convexHull(grown.astype(np.int32))
-        region = np.zeros_like(mask)
-        cv2.fillConvexPoly(region, hull, float(strength))
-        mask = np.maximum(mask, region)
-    mask = cv2.GaussianBlur(mask, (0, 0), max(1.5, face_w * 0.025))[..., None]
-
-    roi_s = swapped[y1:y2, x1:x2].astype(np.float32)
-    roi_o = original[y1:y2, x1:x2].astype(np.float32)
-    out = swapped.copy() if swapped is original else swapped
-    out[y1:y2, x1:x2] = (roi_s * (1.0 - mask) + roi_o * mask).astype(np.uint8)
-    return out
-
-
 def _apply_poisson_blend(swapped_frame: Frame, original_frame: Frame,
                          target_face: Face, affine_matrix: np.ndarray = None,
                          bgr_fake: np.ndarray = None) -> Frame:
@@ -781,10 +732,7 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     # destination. Without this, original_frame aliases temp_frame, which
     # _fast_paste_back mutates in place — so seamlessClone would blend the
     # swapped face onto the already-swapped frame (no visible effect).
-    restore_mouth = float(getattr(modules.globals, "restore_mouth", 0.0))
-    restore_eyes = float(getattr(modules.globals, "restore_eyes", 0.0))
-    needs_original = (opacity < 1.0 or mouth_mask_enabled or poisson_blend_enabled
-                      or restore_mouth > 0 or restore_eyes > 0)
+    needs_original = opacity < 1.0 or mouth_mask_enabled or poisson_blend_enabled
     if needs_original:
         original_frame = temp_frame.copy()
     else:
@@ -849,14 +797,6 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
                     swapped_frame, target_face, mouth_mask_data
                 )
         
-    # --- Expression restoration: real mouth and eyes over the swap ---
-    if restore_mouth > 0 or restore_eyes > 0:
-        try:
-            swapped_frame = _restore_expression(
-                swapped_frame, original_frame, target_face, restore_mouth, restore_eyes)
-        except cv2.error:
-            pass
-
     # --- Poisson Blending ---
     # Mask derived from the swap's own affine (M) + swapped pixels (bgr_fake),
     # so it tracks the swapped face exactly per-frame — no landmark jitter,
