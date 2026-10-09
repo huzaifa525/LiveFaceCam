@@ -160,6 +160,7 @@ QComboBox QAbstractItemView {{
 QSlider {{ min-height: 20px; background: transparent; }}
 QSlider::groove:horizontal {{ height: 4px; background: {t['muted']}; border-radius: 2px; }}
 QSlider::sub-page:horizontal {{ background: {t['primary']}; border-radius: 2px; }}
+QSlider[signed="true"]::sub-page:horizontal {{ background: {t['muted']}; }}
 QSlider::handle:horizontal {{
     background: {t['thumb']}; width: 14px; height: 14px; margin: -6px 0;
     border-radius: 8px; border: 1px solid {t['primary']};
@@ -168,6 +169,11 @@ QSlider::handle:horizontal {{
 /* status bar */
 QFrame#statusBar {{ background: {t['bg']}; border-top: 1px solid {t['border']}; }}
 QLabel#statusLabel {{ color: {t['muted_fg']}; font-size: 12px; }}
+QLabel#liveCanvas {{ background: #000000; }}
+QLabel#livePill {{
+    background: #d93636; color: #ffffff; border-radius: 9px;
+    padding: 1px 8px; font-size: 11px; font-weight: 600; max-height: 20px;
+}}
 QLabel#pill {{ max-height: 20px;
     background: {t['accent']}; color: {t['accent_fg']}; border-radius: 9px;
     padding: 1px 8px; font-size: 11px; font-weight: 500;

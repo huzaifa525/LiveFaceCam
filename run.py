@@ -7,6 +7,10 @@ import sys
 project_root = os.path.dirname(os.path.abspath(__file__))
 os.environ["PATH"] = project_root + os.pathsep + os.environ.get("PATH", "")
 
+# albumentations (pulled in by insightface) checks pypi for updates on import,
+# which stalls startup for seconds when offline or behind a slow network.
+os.environ.setdefault("NO_ALBUMENTATIONS_UPDATE", "1")
+
 # On Windows, register NVIDIA CUDA DLL directories so onnxruntime-gpu can
 # find cuDNN/cublas. Python 3.8+ ignores PATH for extension-module native deps —
 # os.add_dll_directory() is required. Also keep PATH for child processes/ffmpeg.

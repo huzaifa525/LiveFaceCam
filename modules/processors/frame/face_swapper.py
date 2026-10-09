@@ -1,6 +1,7 @@
 from typing import Any, List, Optional, Tuple
 import cv2
 import insightface
+from insightface.utils import face_align
 import logging
 import threading
 import numpy as np
@@ -63,6 +64,118 @@ def _create_elliptical_mask(size: Tuple[int, int]) -> np.ndarray:
         mask = gpu_gaussian_blur(mask, (31, 31), 12)
     _ELLIPTICAL_MASK_CACHE[size] = mask
     return mask
+
+
+
+def _match_face_color(bgr_fake: np.ndarray, aimg: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
+    """Match bgr_fake's LAB color statistics to the target's aligned crop.
+
+    inswapper bakes in the source's skin tone/lighting, which is often the
+    single biggest "looks fake" cue. Stats are restricted to `mask` (the face
+    ellipse) so hair/background near the crop corners don't skew them.
+    (Ported from upstream PR #1924.)
+    """
+    fake_lab = cv2.cvtColor(bgr_fake.astype(np.float32) / 255.0, cv2.COLOR_BGR2LAB)
+    tgt_lab = cv2.cvtColor(aimg.astype(np.float32) / 255.0, cv2.COLOR_BGR2LAB)
+    fake_mean, fake_std = cv2.meanStdDev(fake_lab, mask=mask)
+    tgt_mean, tgt_std = cv2.meanStdDev(tgt_lab, mask=mask)
+    fake_mean = fake_mean.reshape((1, 1, 3))
+    fake_std = np.maximum(fake_std.reshape((1, 1, 3)), 1e-6)
+    tgt_mean = tgt_mean.reshape((1, 1, 3))
+    tgt_std = tgt_std.reshape((1, 1, 3))
+    result_lab = (fake_lab - fake_mean) * (tgt_std / fake_std) + tgt_mean
+    result_bgr = np.clip(cv2.cvtColor(result_lab.astype(np.float32), cv2.COLOR_LAB2BGR), 0.0, 1.0)
+    return (result_bgr * 255.0).astype(np.uint8)
+
+
+def _apply_face_edits(bgr_fake: np.ndarray, temp_frame: Frame, M: np.ndarray) -> np.ndarray:
+    """Face editing on the 128x128 swapped crop, before paste-back.
+
+    Working on the aligned crop keeps every edit cheap enough for live mode,
+    and the soft paste-back alpha masks it to the face for free. Each edit
+    falls back to its input on error so a failed edit never disables the swap.
+    """
+    g = modules.globals
+    color_match = getattr(g, "color_match", False)
+    smoothing = float(getattr(g, "skin_smoothing", 0.0))
+    brightness = float(getattr(g, "face_brightness", 0.0))
+    warmth = float(getattr(g, "face_warmth", 0.0))
+    if not (color_match or smoothing > 0 or brightness or warmth):
+        return bgr_fake
+
+    fh, fw = bgr_fake.shape[:2]
+    ellipse = _create_elliptical_mask((fh, fw))
+
+    if color_match:
+        try:
+            aimg = cv2.warpAffine(temp_frame, M, (fw, fh), borderMode=cv2.BORDER_REPLICATE)
+            stat_mask = np.where(ellipse > 0.5, np.uint8(255), np.uint8(0))
+            bgr_fake = _match_face_color(bgr_fake, aimg, stat_mask)
+        except cv2.error:
+            pass
+
+    if smoothing > 0:
+        try:
+            # Bilateral keeps strong edges (eyes, lips, brows) while flattening skin.
+            smoothed = cv2.bilateralFilter(bgr_fake, 5, 20 + 40 * smoothing, 5)
+            alpha = (ellipse * smoothing * 0.75)[..., None]
+            bgr_fake = (bgr_fake * (1.0 - alpha) + smoothed * alpha).astype(np.uint8)
+        except cv2.error:
+            pass
+
+    if brightness or warmth:
+        try:
+            lab = cv2.cvtColor(bgr_fake, cv2.COLOR_BGR2LAB).astype(np.float32)
+            lab[..., 0] += brightness * 40.0 * ellipse
+            lab[..., 2] += warmth * 12.0 * ellipse
+            bgr_fake = cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+        except cv2.error:
+            pass
+
+    return bgr_fake
+
+
+
+def _swap_pixel_boost(face_swapper: Any, img: Frame, target_face: Face,
+                      source_face: Face, boost: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Run inswapper at boost x its native 128px resolution.
+
+    The face is aligned at 128*boost, split into boost^2 interleaved 128px
+    tiles (every boost-th pixel, so each tile is a full downsampled face),
+    each tile is swapped with the same identity, and the tiles are woven
+    back together. Same idea as FaceFusion's pixel boost: more real detail
+    in eyes, teeth and skin, at boost^2 the inference cost.
+    """
+    size = face_swapper.input_size[0]
+    crop = size * boost
+    aimg, M = face_align.norm_crop2(img, target_face.kps, crop)
+    latent = source_face.normed_embedding.reshape((1, -1))
+    latent = np.dot(latent, face_swapper.emap)
+    latent /= np.linalg.norm(latent)
+    tiles = aimg.reshape(size, boost, size, boost, 3).transpose(1, 3, 0, 2, 4).reshape(-1, size, size, 3)
+    mean = face_swapper.input_mean
+    outs = []
+    for tile in tiles:
+        blob = cv2.dnn.blobFromImage(np.ascontiguousarray(tile), 1.0 / face_swapper.input_std,
+                                     face_swapper.input_size, (mean, mean, mean), swapRB=True)
+        pred = face_swapper.session.run(
+            face_swapper.output_names,
+            {face_swapper.input_names[0]: blob, face_swapper.input_names[1]: latent},
+        )[0]
+        outs.append(pred.transpose((0, 2, 3, 1))[0])
+    woven = np.stack(outs).reshape(boost, boost, size, size, 3).transpose(2, 0, 3, 1, 4).reshape(crop, crop, 3)
+    bgr_fake = np.clip(255 * woven, 0, 255).astype(np.uint8)[:, :, ::-1]
+    return np.ascontiguousarray(bgr_fake), M
+
+
+def _run_swapper(face_swapper: Any, img: Frame, target_face: Face, source_face: Face):
+    boost = int(getattr(modules.globals, "face_detail", 1) or 1)
+    if boost > 1 and hasattr(face_swapper, "emap") and hasattr(face_swapper, "session"):
+        try:
+            return _swap_pixel_boost(face_swapper, img, target_face, source_face, boost)
+        except Exception as e:
+            print(f"[DLC.FACE-SWAPPER] Detail boost failed, using standard swap: {e}")
+    return face_swapper.get(img, target_face, source_face, paste_back=False)
 
 
 def _apply_poisson_blend(swapped_frame: Frame, original_frame: Frame,
@@ -557,13 +670,9 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         # Use paste_back=False and our optimized paste-back
         if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
             with modules.globals.dml_lock:
-                bgr_fake, M = face_swapper.get(
-                    temp_frame, target_face, source_face, paste_back=False
-                )
+                bgr_fake, M = _run_swapper(face_swapper, temp_frame, target_face, source_face)
         else:
-            bgr_fake, M = face_swapper.get(
-                temp_frame, target_face, source_face, paste_back=False
-            )
+            bgr_fake, M = _run_swapper(face_swapper, temp_frame, target_face, source_face)
 
         if bgr_fake is None:
             return original_frame
@@ -571,9 +680,11 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not isinstance(bgr_fake, np.ndarray):
             return original_frame
 
+        bgr_fake = _apply_face_edits(bgr_fake, temp_frame, M)
+
         # Pass a dummy aimg with correct shape — _fast_paste_back only uses aimg.shape
         # to create the white mask. Avoids redundant norm_crop2 (~0.6ms).
-        _face_size = face_swapper.input_size[0]
+        _face_size = bgr_fake.shape[0]
         _aimg_dummy = np.empty((_face_size, _face_size, 3), dtype=np.uint8)
 
         swapped_frame = _fast_paste_back(temp_frame, bgr_fake, _aimg_dummy, M)
@@ -663,15 +774,25 @@ def get_faces_optimized(frame: Frame, use_cache: bool = True) -> Optional[List[F
 # --- END: Mac M1-M5 Optimized Face Detection ---
 
 # --- START: Helper function for interpolation and sharpening ---
-def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.ndarray]) -> Frame:
-    """Applies sharpening and interpolation with Apple Silicon optimizations."""
+def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.ndarray],
+                          allow_temporal: bool = False) -> Frame:
+    """Applies sharpening and interpolation with Apple Silicon optimizations.
+
+    Frame smoothing (interpolation) only runs when allow_temporal is True:
+    the live loop is a single ordered stream, but file processing runs frames
+    in parallel and out of order, where blending with a 'previous' frame is
+    wrong.
+    """
     global PREVIOUS_FRAME_RESULT
 
     sharpness_value = getattr(modules.globals, "sharpness", 0.0)
-    enable_interpolation = getattr(modules.globals, "enable_interpolation", False)
+    interpolation_weight = getattr(modules.globals, "interpolation_weight", 0.0)
+    interpolation_active = (allow_temporal
+                            and getattr(modules.globals, "enable_interpolation", False)
+                            and 0 < interpolation_weight < 1)
 
     # Skip copy when no post-processing is active
-    if sharpness_value <= 0.0 and not enable_interpolation:
+    if sharpness_value <= 0.0 and not interpolation_active:
         PREVIOUS_FRAME_RESULT = None
         return current_frame
 
@@ -713,12 +834,9 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
 
 
     # 2. Apply Interpolation (if enabled)
-    enable_interpolation = getattr(modules.globals, "enable_interpolation", False)
-    interpolation_weight = getattr(modules.globals, "interpolation_weight", 0.2)
-
     final_frame = processed_frame # Start with the current (potentially sharpened) frame
 
-    if enable_interpolation and 0 < interpolation_weight < 1:
+    if interpolation_active:
         if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape == processed_frame.shape and PREVIOUS_FRAME_RESULT.dtype == processed_frame.dtype:
             # Perform interpolation
             try:

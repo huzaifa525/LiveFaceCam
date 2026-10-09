@@ -61,6 +61,14 @@ fp_ui: Dict[str, bool] = {"face_enhancer": False, "face_enhancer_gpen256": False
 face_swapper_enabled: bool = True # General toggle for the swapper processor
 opacity: float = 1.0              # Blend factor for the swapped face (0.0-1.0)
 sharpness: float = 0.0            # Sharpness enhancement for swapped face (0.0-1.0+)
+face_detail: int = 1             # Swap resolution multiplier: 1=128px, 2=256px, 4=512px
+color_match: bool = False         # Match swapped face skin tone/lighting to the target
+skin_smoothing: float = 0.0       # 0-1 bilateral skin smoothing on the swapped face
+face_brightness: float = 0.0      # -1..1 brightness shift on the swapped face
+face_warmth: float = 0.0          # -1..1 warm/cool shift on the swapped face
+frame_smoothing: float = 0.0      # 0-0.8 live frame smoothing amount (UI value)
+enable_interpolation: bool = False  # Live-only frame smoothing
+interpolation_weight: float = 1.0   # Weight of the current frame (1 = no smoothing)
 
 # Mouth Mask Options
 mouth_mask: bool = False           # Enable mouth area masking/pasting

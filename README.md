@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.png" alt="LiveFaceCam icon" width="96"></p>
+
 <h1 align="center">LiveFaceCam: Real-Time AI Face Swap for Webcam & Video Calls</h1>
 
 <p align="center">
@@ -28,6 +30,8 @@
 | Slow or busy camera | UI freezes ~40 s | **Opens in ~2 s, with a clear warning** |
 | Long GPU videos | VRAM leak can crash | **Fixed** |
 | AMD (DirectML) | Can crash on face analysis | **Fixed** |
+| Face detail | 128px swap | **Up to 512px (pixel boost) for sharper eyes, teeth and skin** |
+| Face editing | None | **Skin-tone match, skin smoothing, brightness, warmth, frame smoothing** |
 
 <p align="center">
   <img src="media/livefacecam-ui.png" alt="LiveFaceCam live webcam face swap UI (light theme) with virtual camera toggle" width="49%">
@@ -56,6 +60,8 @@
 - **Photo & video face swap**: convert files and save the result
 - **Virtual camera** output for video calls and streaming
 - **Mouth mask**: keep your real mouth for natural lip-sync
+- **Face detail up to 512px**: pixel-boost swapping for sharper eyes, teeth and skin
+- **Face editing**: skin-tone match, skin smoothing, brightness, warmth and live frame smoothing
 - **Face enhancers**: GFPGAN, GPEN-256, GPEN-512
 - **Swap all faces** or **map faces** to different people
 - Runs **100% locally**: NVIDIA CUDA, AMD DirectML, Intel OpenVINO, Apple CoreML, or CPU

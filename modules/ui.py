@@ -30,7 +30,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -84,6 +84,7 @@ from modules.ui_theme import (
     bind_icon,
     eyebrow,
 )
+from modules.ui_theme import tokens as theme_tokens
 from modules.video_capture import VideoCapturer
 
 if platform.system() == "Windows":
@@ -97,6 +98,8 @@ import json
 ROOT_HEIGHT = 640
 ROOT_WIDTH = 900
 THUMB_SIZE = 236
+APP_ICON_PNG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "icon.png")
+APP_ICON_ICO = os.path.join(os.path.dirname(APP_ICON_PNG), "icon.ico")
 
 PREVIEW_MAX_HEIGHT = 700
 PREVIEW_MAX_WIDTH = 1200
@@ -237,6 +240,12 @@ def save_switch_states():
         "show_fps": modules.globals.show_fps,
         "virtual_camera": modules.globals.virtual_camera,
         "ui_theme": getattr(modules.globals, "ui_theme", "system"),
+        "face_detail": getattr(modules.globals, "face_detail", 1),
+        "color_match": getattr(modules.globals, "color_match", False),
+        "skin_smoothing": getattr(modules.globals, "skin_smoothing", 0.0),
+        "face_brightness": getattr(modules.globals, "face_brightness", 0.0),
+        "face_warmth": getattr(modules.globals, "face_warmth", 0.0),
+        "frame_smoothing": getattr(modules.globals, "frame_smoothing", 0.0),
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mouth_mask_size": modules.globals.mouth_mask_size,
@@ -268,6 +277,17 @@ def load_switch_states():
         modules.globals.show_fps = state.get("show_fps", False)
         modules.globals.virtual_camera = state.get("virtual_camera", False)
         modules.globals.ui_theme = state.get("ui_theme", "system")
+        detail = state.get("face_detail", 1)
+        modules.globals.face_detail = detail if detail in (1, 2, 4) else 1
+        modules.globals.color_match = bool(state.get("color_match", False))
+        for key, lo, hi in (("skin_smoothing", 0.0, 1.0), ("face_brightness", -1.0, 1.0),
+                            ("face_warmth", -1.0, 1.0), ("frame_smoothing", 0.0, 0.8)):
+            try:
+                setattr(modules.globals, key, min(hi, max(lo, float(state.get(key, 0.0)))))
+            except (TypeError, ValueError):
+                setattr(modules.globals, key, 0.0)
+        modules.globals.enable_interpolation = modules.globals.frame_smoothing > 0
+        modules.globals.interpolation_weight = 1.0 - modules.globals.frame_smoothing
         # Mouth mask always starts disabled (slider at 0) on launch,
         # regardless of the persisted value — enable it explicitly each session.
         modules.globals.mouth_mask_size = 0.0
@@ -283,7 +303,7 @@ def load_switch_states():
                     modules.globals.capture_resolution = (w, h)
             except (TypeError, ValueError):
                 pass
-        if state.get("det_size") in (160, 320, 640):
+        if state.get("det_size") in (160, 320, 640, 960, 1280):
             modules.globals.det_size = int(state["det_size"])
     except FileNotFoundError:
         pass
@@ -384,6 +404,10 @@ def _make_image_drop(text: str, size: Tuple[int, int]) -> QLabel:
 
 
 _Switch = SwitchRow
+
+
+def _signed(v: int) -> str:
+    return f"{v:+d}" if v else "0"
 
 
 def _card(title: str = "", description: str = "") -> Tuple[QFrame, QVBoxLayout]:
@@ -489,10 +513,12 @@ class MainWindow(QMainWindow):
         brand.setContentsMargins(8, 0, 0, 0)
         brand.setSpacing(10)
         chip = QLabel()
-        chip.setObjectName("logoChip")
-        chip.setFixedSize(28, 28)
-        chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        bind_icon(chip, "scan-face", "primary_fg", 16)
+        chip.setFixedSize(30, 30)
+        logo = QPixmap(APP_ICON_PNG)
+        if not logo.isNull():
+            logo.setDevicePixelRatio(2)
+            chip.setPixmap(logo.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio,
+                                       Qt.TransformationMode.SmoothTransformation))
         brand.addWidget(chip)
         names = QVBoxLayout()
         names.setSpacing(0)
@@ -746,9 +772,11 @@ class MainWindow(QMainWindow):
         grid.addLayout(_field(_("Resolution"), self.cb_resolution), 0, 0)
 
         self.cb_det_size = QComboBox()
-        self._det_size_options = [160, 320, 640]
+        self._det_size_options = [160, 320, 640, 960, 1280]
+        det_labels = {160: _("160 · fastest"), 320: _("320 · fast"), 640: _("640 · balanced"),
+                      960: _("960 · HD, finds small faces"), 1280: _("1280 · Full HD, slowest")}
         for v in self._det_size_options:
-            self.cb_det_size.addItem(f"{v} x {v}")
+            self.cb_det_size.addItem(det_labels[v])
         cur_det = int(getattr(modules.globals, 'det_size', modules.globals.DEFAULT_DET_SIZE))
         # Normalize to a valid option first so .index() can never raise.
         if cur_det not in self._det_size_options:
@@ -758,7 +786,9 @@ class MainWindow(QMainWindow):
         self.cb_det_size.setCurrentIndex(self._det_size_options.index(cur_det))
         self.cb_det_size.currentIndexChanged.connect(self._on_det_size_change)
         self.cb_det_size.setToolTip(_(
-            "Face detection input resolution. Lower = faster, less accurate at distance."
+            "How hard the app looks for faces. Higher finds smaller or more distant faces "
+            "but costs more time per frame (960 ~1.5x, 1280 ~2.5x). It does not change how "
+            "sharp the swapped face is: use Face detail for that."
         ))
         grid.addLayout(_field(_("Face detection"), self.cb_det_size), 0, 1)
         adv_layout.addLayout(grid)
@@ -830,8 +860,8 @@ class MainWindow(QMainWindow):
         page, body = self._page(_("Tuning"), _("Face quality"),
                                 _("Fine-tune how the swapped face looks. Changes apply instantly, even while live."))
 
-        enh, enh_layout = _card(_("Enhancer"),
-                                _("Sharper, more detailed faces. Lowers live FPS on smaller GPUs."))
+        enh, enh_layout = _card(_("Detail"),
+                                _("Higher detail and enhancers give sharper faces but lower live FPS on smaller GPUs."))
         self.cb_enhancer = QComboBox()
         self.cb_enhancer.addItems(["None", "GFPGAN", "GPEN-512", "GPEN-256"])
         initial = "None"
@@ -844,7 +874,26 @@ class MainWindow(QMainWindow):
         self.cb_enhancer.setCurrentText(initial)
         self.cb_enhancer.currentTextChanged.connect(self._on_enhancer_change)
         self.cb_enhancer.setToolTip(_("Select a face enhancement model (None = no enhancement)"))
-        enh_layout.addLayout(_field(_("Model"), self.cb_enhancer))
+        self.cb_detail = QComboBox()
+        self._detail_options = [
+            (_("Standard · 128px (fastest)"), 1),
+            (_("High · 256px"), 2),
+            (_("Ultra · 512px (photos & video)"), 4),
+        ]
+        for label, _v in self._detail_options:
+            self.cb_detail.addItem(label)
+        cur_detail = int(getattr(modules.globals, "face_detail", 1))
+        self.cb_detail.setCurrentIndex(
+            next((i for i, (_l, v) in enumerate(self._detail_options) if v == cur_detail), 0))
+        self.cb_detail.currentIndexChanged.connect(self._on_detail_change)
+        self.cb_detail.setToolTip(_(
+            "Swaps the face at a higher resolution for sharper eyes, teeth and skin. "
+            "High costs ~3x and Ultra ~12x the time per face, so keep Standard for smooth live video."))
+        row = QHBoxLayout()
+        row.setSpacing(16)
+        row.addLayout(_field(_("Face detail"), self.cb_detail), 1)
+        row.addLayout(_field(_("Enhancer model"), self.cb_enhancer), 1)
+        enh_layout.addLayout(row)
         body.addWidget(enh)
 
         blend, blend_layout = _card(_("Blending"), _("Control how strongly the new face is applied."))
@@ -892,6 +941,57 @@ class MainWindow(QMainWindow):
         grid.setColumnStretch(1, 1)
         blend_layout.addLayout(grid)
         body.addWidget(blend)
+
+        edit, edit_layout = _card(_("Face editing"),
+                                  _("Adjust the swapped face itself. Cheap enough to use live."))
+        self.sw_color_match = self._make_switch(
+            "color_match", "Match skin tone",
+            "Match the new face's skin tone and lighting to the scene",
+            "Blends the new face's colour and lighting into the scene. Recommended.")
+        edit_layout.addWidget(self.sw_color_match)
+        edit_grid = QGridLayout()
+        edit_grid.setHorizontalSpacing(16)
+        edit_grid.setVerticalSpacing(14)
+
+        def edit_slider(row, name, tip, field, min_v, max_v, scale):
+            lab = QLabel(_(name))
+            lab.setMinimumWidth(110)
+            edit_grid.addWidget(lab, row, 0)
+            s_ = QSlider(Qt.Orientation.Horizontal)
+            s_.setRange(min_v, max_v)
+            s_.setValue(int(round(float(getattr(modules.globals, field, 0.0)) * scale)))
+            s_.setToolTip(_(tip))
+            if min_v < 0:
+                s_.setProperty("signed", True)
+            value = QLabel(_signed(s_.value()) if min_v < 0 else f"{s_.value()}")
+            value.setObjectName("sliderValue")
+            value.setMinimumWidth(40)
+            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+            def changed(iv, f=field, lbl=value, signed=min_v < 0):
+                lbl.setText(_signed(iv) if signed else f"{iv}")
+                setattr(modules.globals, f, iv / scale)
+                if f == "frame_smoothing":
+                    modules.globals.enable_interpolation = iv > 0
+                    modules.globals.interpolation_weight = 1.0 - iv / scale
+            s_.valueChanged.connect(changed)
+            s_.sliderReleased.connect(save_switch_states)
+            edit_grid.addWidget(s_, row, 1)
+            edit_grid.addWidget(value, row, 2)
+            return s_
+
+        self.s_skin = edit_slider(0, "Skin smoothing", "Smooth skin while keeping eyes and lips sharp",
+                                  "skin_smoothing", 0, 100, 100)
+        self.s_brightness = edit_slider(1, "Brightness", "Lighten or darken the swapped face",
+                                        "face_brightness", -50, 50, 50)
+        self.s_warmth = edit_slider(2, "Warmth", "Make the swapped face warmer (+) or cooler (-)",
+                                    "face_warmth", -50, 50, 50)
+        self.s_frame_smooth = edit_slider(3, "Frame smoothing", "Live only: blend frames to reduce flicker. "
+                                          "Higher values look steadier but trail on fast movement.",
+                                          "frame_smoothing", 0, 80, 100)
+        edit_grid.setColumnStretch(1, 1)
+        edit_layout.addLayout(edit_grid)
+        body.addWidget(edit)
 
         faces, faces_layout = _card(_("Faces"), _("Choose which faces get swapped."))
         self.sw_many_faces = self._make_switch(
@@ -1078,6 +1178,13 @@ class MainWindow(QMainWindow):
             modules.globals.face_swapper_enabled = True
             update_status(f"Transparency set to {pct}%")
 
+    def _on_detail_change(self, idx: int) -> None:
+        if 0 <= idx < len(self._detail_options):
+            label, value = self._detail_options[idx]
+            modules.globals.face_detail = value
+            save_switch_states()
+            update_status(_("Face detail:") + f" {label}")
+
     def _on_sharpness_change(self, value: float) -> None:
         modules.globals.sharpness = value
         update_status(f"Sharpness set to {value:.1f}")
@@ -1193,7 +1300,7 @@ def _update_tumbler(var: str, value: bool) -> None:
 class PreviewWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(_("Preview"))
+        self.setWindowTitle(f"{modules.metadata.name} · {_('Preview')}")
         self.resize(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1410,7 +1517,9 @@ class _ProcessingWorker(QThread):
                                 and cached_target_face.bbox is not None
                             ):
                                 swapped_bboxes.append(cached_target_face.bbox.astype(int))
-                        temp_frame = fp.apply_post_processing(temp_frame, swapped_bboxes)
+                        temp_frame = fp.apply_post_processing(
+                            temp_frame, swapped_bboxes, allow_temporal=True
+                        )
                     else:
                         temp_frame = fp.process_frame(source_image, temp_frame)
             else:
@@ -1460,14 +1569,36 @@ class _ProcessingWorker(QThread):
 class WebcamPreviewWindow(QWidget):
     def __init__(self, camera_index: int):
         super().__init__()
-        self.setWindowTitle("Live Preview")
-        self.resize(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT)
+        self.setWindowTitle(f"{modules.metadata.name} · {_('Live')}")
+        self.setObjectName("livePreview")
+        self.resize(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT + 38)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         self._image_label = QLabel()
+        self._image_label.setObjectName("liveCanvas")
         self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._image_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         layout.addWidget(self._image_label, 1)
+
+        bar = QFrame()
+        bar.setObjectName("statusBar")
+        bar.setFixedHeight(38)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(14, 0, 14, 0)
+        row.setSpacing(10)
+        live_pill = QLabel(_("LIVE"))
+        live_pill.setObjectName("livePill")
+        row.addWidget(live_pill)
+        self._info_label = QLabel(_("Starting camera…"))
+        self._info_label.setObjectName("statusLabel")
+        row.addWidget(self._info_label, 1)
+        self._vcam_pill = QLabel()
+        self._vcam_pill.setObjectName("pill")
+        row.addWidget(self._vcam_pill)
+        layout.addWidget(bar)
+        self._shown_frames = 0
+        self._fps_t0 = time.time()
 
         self._cap = VideoCapturer(camera_index)
         req_w, req_h = modules.globals.capture_resolution
@@ -1514,8 +1645,22 @@ class WebcamPreviewWindow(QWidget):
             bgr_frame = self._processed_queue.get_nowait()
         except queue.Empty:
             return
-        bgr_frame = fit_image_to_size(bgr_frame, self.width(), self.height())
+        bgr_frame = fit_image_to_size(
+            bgr_frame, self._image_label.width(), self._image_label.height()
+        )
         self._image_label.setPixmap(_bgr_to_qpixmap(bgr_frame))
+        self._shown_frames += 1
+        elapsed = time.time() - self._fps_t0
+        if elapsed >= 1.0:
+            self._info_label.setText(
+                f"{self._cap.actual_width}×{self._cap.actual_height} · "
+                f"{self._shown_frames / elapsed:.0f} fps"
+            )
+            self._vcam_pill.setText(
+                _("Video calls: on") if modules.globals.virtual_camera else _("Video calls: off")
+            )
+            self._shown_frames = 0
+            self._fps_t0 = time.time()
 
     def closeEvent(self, event) -> None:
         # __init__ can bail out before these exist (e.g. the camera fails to open),
@@ -1621,7 +1766,7 @@ class MapperDialog(QDialog):
             src_label = QLabel(f"S-{row}")
             src_label.setFixedSize(MAPPER_PREVIEW_SIZE, MAPPER_PREVIEW_SIZE)
             src_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            src_label.setStyleSheet("border: 1px dashed #555;")
+            src_label.setStyleSheet(f"border: 1px dashed {theme_tokens()['input']}; border-radius: 8px;")
             grid.addWidget(src_label, row, 1)
             if "source" in item:
                 src_label.setPixmap(_make_thumb(item["source"]["cv2"]))
@@ -1634,7 +1779,7 @@ class MapperDialog(QDialog):
             tgt_label = QLabel(f"T-{row}")
             tgt_label.setFixedSize(MAPPER_PREVIEW_SIZE, MAPPER_PREVIEW_SIZE)
             tgt_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            tgt_label.setStyleSheet("border: 1px solid #555;")
+            tgt_label.setStyleSheet(f"border: 1px solid {theme_tokens()['border']}; border-radius: 8px;")
             grid.addWidget(tgt_label, row, 3)
             if "target" in item:
                 tgt_label.setPixmap(_make_thumb(item["target"]["cv2"]))
@@ -1721,7 +1866,7 @@ class LiveMapperDialog(QDialog):
             src_label = QLabel(f"S-{row}")
             src_label.setFixedSize(MAPPER_PREVIEW_SIZE, MAPPER_PREVIEW_SIZE)
             src_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            src_label.setStyleSheet("border: 1px dashed #555;")
+            src_label.setStyleSheet(f"border: 1px dashed {theme_tokens()['input']}; border-radius: 8px;")
             grid.addWidget(src_label, row, 1)
             if "source" in item:
                 src_label.setPixmap(_make_thumb(item["source"]["cv2"]))
@@ -1739,7 +1884,7 @@ class LiveMapperDialog(QDialog):
             tgt_label = QLabel(f"T-{row}")
             tgt_label.setFixedSize(MAPPER_PREVIEW_SIZE, MAPPER_PREVIEW_SIZE)
             tgt_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            tgt_label.setStyleSheet("border: 1px dashed #555;")
+            tgt_label.setStyleSheet(f"border: 1px dashed {theme_tokens()['input']}; border-radius: 8px;")
             grid.addWidget(tgt_label, row, 4)
             if "target" in item:
                 tgt_label.setPixmap(_make_thumb(item["target"]["cv2"]))
@@ -1856,6 +2001,16 @@ def init(
     else:
         _APP = QApplication.instance()
     apply_theme(_APP, getattr(modules.globals, "ui_theme", "system"))
+    _APP.setApplicationName(modules.metadata.name)
+    if os.path.exists(APP_ICON_ICO):
+        _APP.setWindowIcon(QIcon(APP_ICON_ICO))
+    if sys.platform == "win32":
+        # Own taskbar identity, so Windows shows our icon instead of python.exe's.
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LiveFaceCam.App")
+        except Exception:
+            pass
     try:
         _APP.styleHints().colorSchemeChanged.connect(_on_system_theme_changed)
     except Exception:

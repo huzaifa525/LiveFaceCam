@@ -50,6 +50,8 @@ if not exist models mkdir models
 call :model inswapper_128_fp16.onnx || goto :fail
 call :model gfpgan-1024.onnx || goto :fail
 
+rem --- 5. Desktop shortcut ---------------------------------------------------
+powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\LiveFaceCam.lnk'); $s.TargetPath='%~dp0Start-LiveFaceCam.bat'; $s.WorkingDirectory='%~dp0'; $s.IconLocation='%~dp0assets\icon.ico'; $s.Save()" >nul 2>nul && echo [OK] Desktop shortcut created
 echo.
 echo  [OK] Setup complete. Start the app with Start-LiveFaceCam.bat
 echo.
